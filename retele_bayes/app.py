@@ -93,7 +93,7 @@ if menu == "Weather Prediction":
         
         # Data Table
         df = pd.DataFrame(res['data'], columns=['Day', 'Observation', 'Real', 'Viterbi', 'Fwd-Bwd', 'CRF', 'Greedy'])
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, width="stretch")
 
 # ==============================================================================
 # 2. TEXT CORRECTION MODULE (ROMANIAN DEFAULT + METRICS)
@@ -238,7 +238,7 @@ elif menu == "POS Tagging":
         # Styled Table
         st.dataframe(
             df.style.apply(lambda x: ['background-color: #ffcccc' if x['Match'] == "❌" else '' for i in x], axis=1),
-            use_container_width=True
+            width="stretch"
         )
         
         # Accuracy Score
