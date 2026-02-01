@@ -84,11 +84,16 @@ def train_and_save_model():
     # 2. Build vocab and tags from training data only
     all_tags = sorted(list(set(str(t) for s in train_sents for w, t in s)))
     all_words = sorted(list(set(str(w).lower() for s in train_sents for w, t in s)))
-    
+
+    # Add UNK token for out-of-vocabulary words at test time
+    if "<UNK>" not in all_words:
+        all_words.append("<UNK>")
+
     tag2idx = {tag: i for i, tag in enumerate(all_tags)}
     word2idx = {word: i for i, word in enumerate(all_words)}
-    
+
     n_states, n_obs = len(all_tags), len(all_words)
+
     alpha = 0.001 # Smoothing
     
     # 3. Training: Calculate pi, P, and Q
@@ -101,7 +106,7 @@ def train_and_save_model():
         for i in range(len(sent)):
             w, t = str(sent[i][0]).lower(), str(sent[i][1])
             s_idx = tag2idx[t]
-            o_idx = word2idx[w]
+            o_idx = word2idx.get(w, word2idx["<UNK>"])
             if i == 0: start_counts[s_idx] += 1
             else:
                 prev_t = str(sent[i-1][1])
@@ -119,9 +124,10 @@ def train_and_save_model():
     total = 0
     
     # We test on a subset of the 25% if it's too slow, or use all for full accuracy
-    for sent in test_sents[:500]: 
-        noun_idx = tag2idx.get('NOUN', 0) 
-        obs_indices = [word2idx.get(str(w).lower(), noun_idx) for w, t in sent]
+    for sent in test_sents[:500]:
+        unk_idx = word2idx["<UNK>"]
+        obs_indices = [word2idx.get(str(w).lower(), unk_idx) for w, t in sent]
+
 
         true_tags = [tag2idx.get(str(t), 0) for w, t in sent]
         

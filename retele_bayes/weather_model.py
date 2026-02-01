@@ -6,6 +6,7 @@ def get_params_weather_standard():
     # Observations: number of ice creams eaten
     obs_vocab = ["1 ice cream", "2 ice creams", "3 ice creams"]
     
+    # Initial probability vector (pi)
     start_p = np.array([0.8, 0.2])
     
     # Transition Matrix: P(State_t | State_t-1)
