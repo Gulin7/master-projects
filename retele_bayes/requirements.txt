@@ -1,5 +1,5 @@
 nltk==3.9.2
-numpy<2.0.0
+numpy
 pandas
 spacy==3.8.2
 streamlit==1.53.1
