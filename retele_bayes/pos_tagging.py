@@ -8,6 +8,16 @@ import sequence_algorithms
 import spacy
 from spacy.tokens import Doc
 
+try:
+    nltk.data.find('corpora/brown')
+except LookupError:
+    nltk.download('brown')
+
+try:
+    nltk.data.find('taggers/universal_tagset')
+except LookupError:
+    nltk.download('universal_tagset')
+
 # Global variable to cache the loaded model
 SPACY_NLP = None
 
