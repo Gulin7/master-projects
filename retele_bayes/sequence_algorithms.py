@@ -1,7 +1,19 @@
 import numpy as np
 
 def generic_viterbi_algorithm(obs, start_p, trans_p, emit_p):
-    """ Viterbi: Finds the most likely global path (contextual). """
+    """
+    Viterbi decoding via dynamic programming (max-sum in log-space).
+
+    Args:
+        obs:      list/array of observation indices, length T
+        start_p:  shape (N,) initial probabilities P(X0=s)
+        trans_p:  shape (N,N) transition probabilities P(Xt=s | Xt-1=sprev)
+        emit_p:   shape (N,M) emission probabilities P(Yt=o | Xt=s)
+        eps:      small value to avoid log(0)
+
+    Returns:
+        best_path: list of length T with state indices of the MAP path
+    """
     n_states = trans_p.shape[0]
     T = len(obs)
     
