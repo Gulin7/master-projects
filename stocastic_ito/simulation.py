@@ -146,12 +146,12 @@ def simulate_black_scholes_book(
     """
     Black-Scholes exponential update inspired by Algorithm 5.1:
 
-    S_{j+1} = S_j * exp((μ_j - 0.5 σ_j^2) Δt + σ_j sqrt(Δt) Z_j)
+    S_{j+1} = S_j * exp((μ_j - 0.5 sigma_j^2) Δt + sigma_j sqrt(Δt) Z_j)
 
     where Z_j ~ N(0,1).
 
-    For constant μ and σ, this matches the exact one-step GBM update.
-    For time-varying μ(t,S) and σ(t,S), this uses left-point evaluation at each step.
+    For constant μ and sigma, this matches the exact one-step GBM update.
+    For time-varying μ(t,S) and sigma(t,S), this uses left-point evaluation at each step.
     """
     _validate_inputs(S0, T, n_steps, n_paths)
 
