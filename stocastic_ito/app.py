@@ -4,7 +4,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from simulation import (
-    simulate_black_scholes,
+    simulate_black_scholes_euler,
+    simulate_black_scholes_book,
     compute_path_statistics,
     mu_constant,
     mu_time_varying,
@@ -37,6 +38,22 @@ st.markdown(
 
 # SIDEBAR
 st.sidebar.title("⚙️ Simulation Parameters")
+
+st.sidebar.header("Simulation Scheme")
+scheme_choice = st.sidebar.selectbox(
+    "Choose simulation method",
+    [
+        "Euler-Maruyama",
+        "Book Algorithm 5.1 (Exponential)",
+    ],
+)
+
+if scheme_choice == "Euler-Maruyama":
+    simulate_func = simulate_black_scholes_euler
+    scheme_name = "Euler-Maruyama"
+else:
+    simulate_func = simulate_black_scholes_book
+    scheme_name = "Book Algorithm 5.1 (Exponential)"
 
 st.sidebar.header("Market Parameters")
 S0 = st.sidebar.number_input("Initial Price S₀", 10.0, 1000.0, 100.0, step=5.0)
@@ -79,7 +96,7 @@ paths_to_show = st.sidebar.slider("Paths to display", 10, 200, 50, 10)
 
 
 # RUN SIMULATION
-time_grid, paths = simulate_black_scholes(
+time_grid, paths = simulate_func(
     S0=S0,
     T=T,
     n_steps=n_steps,
@@ -96,9 +113,9 @@ S_T = paths[:, -1]
 # MAIN PAGE
 st.title("📈 Black-Scholes Stock Price Simulation")
 st.markdown(
-    f"**Algorithm 5.1 — Euler-Maruyama Scheme**  \n"
-    f"Current drift: `{mu_func.__name__}`  \n"
-    f"Current volatility: `{sigma_func.__name__}`"
+    f"**Simulation scheme:** `{scheme_name}`  \n"
+    f"**Current drift:** `{mu_func.__name__}`  \n"
+    f"**Current volatility:** `{sigma_func.__name__}`"
 )
 
 col1, col2, col3 = st.columns(3)
@@ -156,8 +173,9 @@ with tab1:
 
     st.plotly_chart(fig1, use_container_width=True)
 
-    st.info(
-        """
+    if scheme_choice == "Euler-Maruyama":
+        st.info(
+            """
 **SDE simulated:**
 
 dS = μ(t,S)·S·dt + σ(t,S)·S·dW
@@ -166,7 +184,17 @@ dS = μ(t,S)·S·dt + σ(t,S)·S·dW
 
 S_(i+1) = S_i + μ(t_i,S_i)·S_i·Δt + σ(t_i,S_i)·S_i·√Δt·Z_i, where Z_i ~ N(0,1)
 """
-    )
+        )
+    else:
+        st.info(
+            """
+**Book-style exponential update:**
+
+S_(i+1) = S_i · exp((μ(t_i,S_i) - 0.5·σ(t_i,S_i)^2)·Δt + σ(t_i,S_i)·√Δt·Z_i)
+
+where Z_i ~ N(0,1)
+"""
+        )
 
 
 # TAB 2 — TERMINAL DISTRIBUTION
@@ -272,7 +300,7 @@ st.divider()
 st.markdown(
     """
 <div style='text-align:center; color:gray; font-size:13px'>
-    Black-Scholes-Type Simulation · Algorithm 5.1 · Euler-Maruyama
+    Black-Scholes-Type Simulation · Euler-Maruyama and Book Algorithm 5.1
 </div>
 """,
     unsafe_allow_html=True,
