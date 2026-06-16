@@ -1,0 +1,2352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black-Scholes Monte Carlo Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:      #1a1a2e;
+  --bg2:     #12122a;
+  --bg3:     #0d0d1f;
+  --border:  rgba(60,70,130,0.55);
+  --text:    #dde2f0;
+  --dim:     #5d6e99;
+  --accent:  #6c8cff;
+  --accent2: #4fc3c3;
+  --white:   #f0f2ff;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+#shell { display: flex; flex-direction: column; height: 100vh; }
+
+#header {
+  background: var(--bg3);
+  padding: 9px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#header h1 {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.4px;
+}
+
+#tabbar {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  padding: 0 10px;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.tab {
+  padding: 9px 15px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-family: inherit;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+#body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+#sidebar {
+  width: 300px;
+  min-width: 300px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 16px 14px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.sb-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--dim);
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+  margin-top: 4px;
+}
+.sb-section { margin-bottom: 20px; }
+
+.sl-wrap { margin-bottom: 13px; }
+.sl-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+.sl-name { font-size: 12px; color: #a0b0d0; }
+.sl-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 46px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: rgba(108,140,255,0.22);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+input[type="range"]:hover::-webkit-slider-thumb { background: #8aa8ff; }
+
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Single-chart layout (Tab 1) ── */
+.chart-wrap { flex: 1; position: relative; min-height: 0; }
+
+#statsbar {
+  display: flex;
+  gap: 28px;
+  padding: 10px 2px 2px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.stat { display: flex; flex-direction: column; gap: 3px; }
+.stat-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--dim); }
+.stat-vals { display: flex; gap: 7px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.sv-th  { font-size: 13px; font-weight: 700; color: var(--white); }
+.sv-sep { font-size: 10px; color: #3a3a5e; }
+.sv-mc  { font-size: 12px; color: var(--accent); }
+.sv-1   { font-size: 13px; font-weight: 600; color: var(--accent2); }
+
+/* ── Dual-chart layout (Tab 2/3) ── */
+.dual-wrap { flex: 1; display: flex; gap: 14px; min-height: 0; }
+.half-col  { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.half-wrap { flex: 1; position: relative; min-height: 0; }
+.chart-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--dim); text-align: center;
+  padding: 2px 0 6px; flex-shrink: 0;
+}
+.annot-bar {
+  font-size: 11px; color: var(--dim); text-align: center;
+  padding: 5px 2px 0; flex-shrink: 0; min-height: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.annot-bar b { color: var(--text); }
+
+/* ── Toggle buttons ── */
+.tgl-group {
+  display: flex; gap: 2px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px;
+  margin-bottom: 14px;
+}
+.tgl {
+  flex: 1; padding: 5px 0;
+  background: none; border: none; border-radius: 4px;
+  color: var(--dim); font-size: 12.5px; font-family: inherit;
+  cursor: pointer; transition: background .15s, color .15s;
+}
+.tgl.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+/* ── Sidebar stat cards ── */
+.sb-card {
+  background: rgba(108,140,255,0.07);
+  border: 1px solid rgba(108,140,255,0.18);
+  border-radius: 7px; padding: 10px 12px;
+  margin-bottom: 9px;
+}
+.sb-card-lbl {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1px; color: var(--dim); margin-bottom: 8px;
+}
+.sb-price {
+  font-size: 24px; font-weight: 700; color: var(--white);
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.sb-price-sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.sb-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.sb-key { font-size: 12px; color: var(--dim); }
+.sb-val { font-size: 12px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.sb-note { font-size: 10px; color: #5a6b9a; margin-top: 6px; line-height: 1.45; }
+.clr-red  { color: #ff7777 !important; }
+.clr-teal { color: var(--accent2) !important; }
+
+/* ── Barrier badge ── */
+.barrier-badge {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  padding: 2px 8px; border-radius: 4px; vertical-align: middle;
+}
+.badge-down   { background: rgba(255,120,80,0.18); color: #ff9060; }
+.badge-up     { background: rgba(80,200,120,0.18); color: #5fcc80; }
+.badge-double { background: rgba(108,140,255,0.18); color: var(--accent); }
+.badge-none   { background: rgba(80,90,130,0.18); color: var(--dim); }
+/* ── Progress bar ── */
+.progress-wrap { background: rgba(60,70,130,0.3); border-radius: 3px; height: 5px; margin-top: 4px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; background: var(--accent2); transition: width 0.2s; }
+
+/* ── Exotic sub-tabs ── */
+.ex-stab-row { display: flex; gap: 6px; margin-bottom: 10px; flex-shrink: 0; }
+.ex-stab {
+  padding: 5px 14px; border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg3); color: var(--dim);
+  font-size: 11.5px; font-family: inherit;
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.ex-stab:hover { color: var(--text); }
+.ex-stab.active { background: rgba(108,140,255,0.15); color: var(--accent); border-color: rgba(108,140,255,0.55); font-weight: 600; }
+.ex-area { flex: 1; display: flex; gap: 14px; min-height: 0; }
+.cliquet-stack { flex: 1; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.cl-bar-wrap { flex: 0 0 36%; position: relative; min-height: 0; }
+
+/* ── Refresh button ── */
+#btn-refresh {
+  margin-left: auto;
+  align-self: center;
+  padding: 5px 12px;
+  background: rgba(108,140,255,0.10);
+  border: 1px solid rgba(108,140,255,0.35);
+  border-radius: 5px;
+  color: var(--dim);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+  flex-shrink: 0;
+}
+#btn-refresh:hover { background: rgba(108,140,255,0.22); color: var(--text); border-color: rgba(108,140,255,0.65); }
+#btn-refresh:active { background: rgba(108,140,255,0.32); }
+
+/* ── Placeholder ── */
+.ph { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; color: var(--dim); }
+.ph-icon { font-size: 28px; opacity: 0.25; }
+.ph-text { font-size: 13px; opacity: 0.45; }
+</style>
+</head>
+<body>
+<div id="shell">
+  <div id="header"><h1>Black-Scholes Monte Carlo Visualizer</h1></div>
+  <div id="tabbar">
+    <button class="tab active" data-tab="path">Path Simulator</button>
+    <button class="tab" data-tab="european">European</button>
+    <button class="tab" data-tab="dividends">Dividends</button>
+    <button class="tab" data-tab="asian">Asian</button>
+    <button class="tab" data-tab="barrier">Barrier</button>
+    <button class="tab" data-tab="exotic">Exotic</button>
+    <button class="tab" data-tab="calibration">Calibration</button>
+    <button id="btn-refresh" title="Re-run simulation with same parameters">&#8635; Refresh</button>
+  </div>
+  <div id="body">
+    <div id="sidebar"></div>
+    <div id="main"></div>
+  </div>
+</div>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════
+//  VERTICAL LINE PLUGIN  (shared across all tab charts)
+// ═══════════════════════════════════════════════════════
+
+const VLinePlugin = {
+  id: 'vline',
+  afterDraw(chart) {
+    const lines = chart.options.plugins.vlines;
+    if (!lines || !lines.length) return;
+    const { ctx, chartArea, scales } = chart;
+    if (!scales.x || !chartArea) return;
+    lines.forEach(({ xVal, color, dash, label }) => {
+      const px = scales.x.getPixelForValue(xVal);
+      if (isNaN(px) || px < chartArea.left - 1 || px > chartArea.right + 1) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.strokeStyle = color || 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(dash || [6, 4]);
+      ctx.moveTo(px, chartArea.top);
+      ctx.lineTo(px, chartArea.bottom);
+      ctx.stroke();
+      if (label) {
+        ctx.setLineDash([]);
+        ctx.font = '10px Segoe UI,system-ui,sans-serif';
+        ctx.fillStyle = color || 'rgba(255,255,255,0.6)';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, px, chartArea.top + 11);
+      }
+      ctx.restore();
+    });
+  },
+};
+Chart.register(VLinePlugin);
+
+// ═══════════════════════════════════════════════════════
+//  MATH UTILITIES
+// ═══════════════════════════════════════════════════════
+
+let _randnCache = null;
+function randn() {
+  if (_randnCache !== null) { const v = _randnCache; _randnCache = null; return v; }
+  let u;
+  do { u = Math.random(); } while (u === 0);
+  const mag = Math.sqrt(-2 * Math.log(u));
+  const theta = 2 * Math.PI * Math.random();
+  _randnCache = mag * Math.sin(theta);
+  return mag * Math.cos(theta);
+}
+
+function quantile(arr, p) {
+  const s = arr.slice().sort((a, b) => a - b);
+  const i = p * (s.length - 1);
+  const lo = Math.floor(i), hi = Math.ceil(i);
+  return s[lo] + (i - lo) * (s[hi] - s[lo]);
+}
+
+function mean(arr) { return arr.reduce((a, b) => a + b, 0) / arr.length; }
+
+function stddev(arr, avg) {
+  if (arr.length < 2) return 0;
+  const m = avg !== undefined ? avg : mean(arr);
+  return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / (arr.length - 1));
+}
+
+// ═══════════════════════════════════════════════════════
+//  BLACK-SCHOLES FORMULAS  (shared across tabs 2–7)
+// ═══════════════════════════════════════════════════════
+
+// Abramowitz & Stegun rational approximation, |err| < 7.5e-8
+function normalCDF(x) {
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const t = 1 / (1 + 0.2316419 * x);
+  const p = t * (0.319381530 + t * (-0.356563782
+          + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const cdf = 1 - Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI) * p;
+  return sign === 1 ? cdf : 1 - cdf;
+}
+
+function lognormalPDF(x, muLn, sigLn) {
+  if (x <= 0) return 0;
+  const z = (Math.log(x) - muLn) / sigLn;
+  return Math.exp(-0.5 * z * z) / (x * sigLn * Math.sqrt(2 * Math.PI));
+}
+
+function bsD1D2(S, K, r, sigma, T, q) {
+  q = q || 0;
+  const sqT = Math.sqrt(T);
+  const d1 = (Math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / (sigma * sqT);
+  return { d1, d2: d1 - sigma * sqT };
+}
+
+function bsCall(S, K, r, sigma, T, q) {
+  q = q || 0;
+  const { d1, d2 } = bsD1D2(S, K, r, sigma, T, q);
+  return S * Math.exp(-q * T) * normalCDF(d1) - K * Math.exp(-r * T) * normalCDF(d2);
+}
+
+function bsPut(S, K, r, sigma, T, q) {
+  q = q || 0;
+  const { d1, d2 } = bsD1D2(S, K, r, sigma, T, q);
+  return K * Math.exp(-r * T) * normalCDF(-d2) - S * Math.exp(-q * T) * normalCDF(-d1);
+}
+
+// ═══════════════════════════════════════════════════════
+//  GBM SIMULATION  (Tab 1)
+// ═══════════════════════════════════════════════════════
+
+function simulateGBM(S0, mu, sigma, T, nPaths, nSteps) {
+  const dt  = T / nSteps;
+  const nu  = (mu - 0.5 * sigma * sigma) * dt;
+  const vol = sigma * Math.sqrt(dt);
+  const paths = [];
+  for (let i = 0; i < nPaths; i++) {
+    const p = new Float64Array(nSteps + 1);
+    p[0] = S0;
+    for (let j = 1; j <= nSteps; j++) p[j] = p[j - 1] * Math.exp(nu + vol * randn());
+    paths.push(p);
+  }
+  return paths;
+}
+
+// ═══════════════════════════════════════════════════════
+//  PATH COLORS
+// ═══════════════════════════════════════════════════════
+
+const COLORS = [
+  [94,129,244],[224,123,94],[87,196,160],[196,144,228],[232,184,75],
+  [100,210,220],[230,100,130],[130,200,100],[180,150,240],[240,165,80],
+  [80,160,240],[200,90,90],[90,200,180],[200,130,200],[200,200,80],
+  [120,180,255],[255,150,100],[100,230,150],[220,100,200],[255,200,100],
+  [100,200,255],[255,100,150],[150,255,150],[200,150,255],[255,230,150],
+  [150,220,255],[255,150,180],[150,255,200],[220,200,255],[255,220,180],
+].map(([r,g,b]) => `rgba(${r},${g},${b},0.55)`);
+
+// ═══════════════════════════════════════════════════════
+//  CHART MANAGEMENT
+// ═══════════════════════════════════════════════════════
+
+let chart = null;           // Tab 1 single chart
+const tabCharts = {};       // multi-chart tabs, keyed by canvas id
+
+function destroyChart() { if (chart) { chart.destroy(); chart = null; } }
+
+function destroyAll() {
+  destroyChart();
+  Object.keys(tabCharts).forEach(id => {
+    if (tabCharts[id]) { tabCharts[id].destroy(); delete tabCharts[id]; }
+  });
+}
+
+function mkChart(canvasId, config) {
+  if (tabCharts[canvasId]) { tabCharts[canvasId].destroy(); delete tabCharts[canvasId]; }
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return null;
+  tabCharts[canvasId] = new Chart(canvas, config);
+  return tabCharts[canvasId];
+}
+
+// ── Shared chart style helpers ──────────────────────────
+const C = {
+  tick:   '#4d5e8a',
+  grid:   'rgba(45,58,105,0.55)',
+  title:  '#5d6e99',
+  legend: '#7888bb',
+};
+
+function xLinearScale(title, extra) {
+  return Object.assign({
+    type: 'linear',
+    ticks: { color: C.tick, font: { size: 11 }, maxTicksLimit: 8 },
+    grid:  { color: C.grid },
+    title: { display: !!title, text: title || '', color: C.title, font: { size: 11 } },
+  }, extra || {});
+}
+
+function yScale(title, extra) {
+  return Object.assign({
+    ticks: { color: C.tick, font: { size: 11 } },
+    grid:  { color: C.grid },
+    title: { display: !!title, text: title || '', color: C.title, font: { size: 11 } },
+  }, extra || {});
+}
+
+function legendOpts() {
+  return {
+    position: 'top', align: 'end',
+    labels: { filter: item => item.text !== '', color: C.legend, font: { size: 11 }, boxWidth: 20, padding: 12 },
+  };
+}
+
+// ── Histogram helper ────────────────────────────────────
+function makeHistogram(samples, nBins) {
+  const lo = Math.min(...samples) * 0.96;
+  const hi = Math.max(...samples) * 1.04;
+  const bw = (hi - lo) / nBins;
+  const counts = new Array(nBins).fill(0);
+  samples.forEach(v => { const b = Math.min(Math.floor((v - lo) / bw), nBins - 1); counts[b]++; });
+  const N = samples.length;
+  return {
+    mids:      Array.from({ length: nBins }, (_, i) => lo + (i + 0.5) * bw),
+    densities: counts.map(c => c / (N * bw)),
+    lo, hi, bw,
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB 1 — PATH SIMULATOR
+// ═══════════════════════════════════════════════════════
+
+function renderPath() {
+  const S0     = +document.getElementById('sl-s0').value;
+  const mu     = +document.getElementById('sl-mu').value;
+  const sigma  = +document.getElementById('sl-sigma').value;
+  const T      = +document.getElementById('sl-T').value;
+  const nP     = +document.getElementById('sl-np').value;
+  const nS     = +document.getElementById('sl-ns').value;
+
+  const paths = simulateGBM(S0, mu, sigma, T, nP, nS);
+  const tArr = Array.from({ length: nS + 1 }, (_, j) => j * T / nS);
+
+  const p5xy = [], p95xy = [], thMuxy = [];
+  for (let j = 0; j <= nS; j++) {
+    const col = Array.from({ length: nP }, (_, i) => paths[i][j]);
+    p5xy.push({ x: tArr[j], y: quantile(col, 0.05) });
+    p95xy.push({ x: tArr[j], y: quantile(col, 0.95) });
+    thMuxy.push({ x: tArr[j], y: S0 * Math.exp(mu * tArr[j]) });
+  }
+
+  const datasets = [
+    { label: '5th–95th band', data: p5xy,  borderColor: 'rgba(108,140,255,0.32)', backgroundColor: 'rgba(80,120,220,0.13)', borderWidth: 1, borderDash: [5,4], pointRadius: 0, fill: '+1' },
+    { label: '',               data: p95xy, borderColor: 'rgba(108,140,255,0.32)', backgroundColor: 'transparent',          borderWidth: 1, borderDash: [5,4], pointRadius: 0, fill: false },
+    ...paths.map((path, i) => ({ label: i === 0 ? 'Simulated paths' : '', data: Array.from(path, (y, j) => ({ x: tArr[j], y })), borderColor: COLORS[i % COLORS.length], borderWidth: 1.2, pointRadius: 0, fill: false })),
+    { label: 'E[S(t)] = S₀·e^(μt)', data: thMuxy, borderColor: 'rgba(240,245,255,0.92)', borderWidth: 2.5, pointRadius: 0, fill: false },
+  ];
+
+  mkChart('path-canvas', {
+    type: 'line',
+    data: { datasets },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'none' },
+      plugins: { legend: legendOpts(), tooltip: { enabled: false }, vlines: [] },
+      scales: {
+        x: xLinearScale('Time (years)', { min: 0, max: T }),
+        y: yScale('S(t)'),
+      },
+    },
+  });
+
+  const finals = paths.map(p => p[nS]);
+  const sm = mean(finals), ss = stddev(finals, sm);
+  const tm = S0 * Math.exp(mu * T);
+  const ts = tm * Math.sqrt(Math.exp(sigma * sigma * T) - 1);
+  document.getElementById('sv-et-th').textContent = tm.toFixed(2);
+  document.getElementById('sv-et-mc').textContent = 'MC: ' + sm.toFixed(2);
+  document.getElementById('sv-sd-th').textContent = ts.toFixed(2);
+  document.getElementById('sv-sd-mc').textContent = 'MC: ' + ss.toFixed(2);
+  document.getElementById('sv-min').textContent   = Math.min(...finals).toFixed(2);
+  document.getElementById('sv-max').textContent   = Math.max(...finals).toFixed(2);
+}
+
+function pathSidebar() {
+  return `
+<div class="sb-section">
+  <div class="sb-title">Market Parameters</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">S&#8320; &mdash; initial price</span><span class="sl-val" id="vl-s0">100</span></div>
+    <input type="range" id="sl-s0" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&mu; &mdash; drift</span><span class="sl-val" id="vl-mu">0.08</span></div>
+    <input type="range" id="sl-mu" min="-0.20" max="0.50" step="0.01" value="0.08">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&sigma; &mdash; volatility</span><span class="sl-val" id="vl-sigma">0.20</span></div>
+    <input type="range" id="sl-sigma" min="0.05" max="0.80" step="0.01" value="0.20">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">T &mdash; horizon (years)</span><span class="sl-val" id="vl-T">1.00</span></div>
+    <input type="range" id="sl-T" min="0.25" max="5.0" step="0.25" value="1.0">
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-title">Simulation Settings</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">N &mdash; paths</span><span class="sl-val" id="vl-np">10</span></div>
+    <input type="range" id="sl-np" min="1" max="30" step="1" value="10">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">time steps</span><span class="sl-val" id="vl-ns">250</span></div>
+    <input type="range" id="sl-ns" min="50" max="500" step="50" value="250">
+  </div>
+</div>`;
+}
+
+function pathPanel() {
+  return `
+<div class="chart-wrap"><canvas id="path-canvas"></canvas></div>
+<div id="statsbar">
+  <div class="stat"><div class="stat-lbl">E[S(T)]</div><div class="stat-vals"><span class="sv-th" id="sv-et-th">&mdash;</span><span class="sv-sep">vs</span><span class="sv-mc" id="sv-et-mc">&mdash;</span></div></div>
+  <div class="stat"><div class="stat-lbl">Std[S(T)]</div><div class="stat-vals"><span class="sv-th" id="sv-sd-th">&mdash;</span><span class="sv-sep">vs</span><span class="sv-mc" id="sv-sd-mc">&mdash;</span></div></div>
+  <div class="stat"><div class="stat-lbl">Min S(T)</div><div class="stat-vals"><span class="sv-1" id="sv-min">&mdash;</span></div></div>
+  <div class="stat"><div class="stat-lbl">Max S(T)</div><div class="stat-vals"><span class="sv-1" id="sv-max">&mdash;</span></div></div>
+</div>`;
+}
+
+function initPath() {
+  const sliders = [
+    { sl: 'sl-s0',    vl: 'vl-s0',    fmt: v => Math.round(+v)  },
+    { sl: 'sl-mu',    vl: 'vl-mu',    fmt: v => (+v).toFixed(2)  },
+    { sl: 'sl-sigma', vl: 'vl-sigma', fmt: v => (+v).toFixed(2)  },
+    { sl: 'sl-T',     vl: 'vl-T',     fmt: v => (+v).toFixed(2)  },
+    { sl: 'sl-np',    vl: 'vl-np',    fmt: v => Math.round(+v)   },
+    { sl: 'sl-ns',    vl: 'vl-ns',    fmt: v => Math.round(+v)   },
+  ];
+  sliders.forEach(({ sl, vl, fmt }) => {
+    const el = document.getElementById(sl), ve = document.getElementById(vl);
+    el.addEventListener('input', () => { ve.textContent = fmt(el.value); renderPath(); });
+  });
+  renderPath();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB 2 — EUROPEAN OPTIONS
+// ═══════════════════════════════════════════════════════
+
+let euType = 'call';
+
+function eurSidebar() {
+  return `
+<div class="sb-section">
+  <div class="sb-title">Option Type</div>
+  <div class="tgl-group">
+    <button id="eu-btn-call" class="tgl ${euType === 'call' ? 'active' : ''}">Call</button>
+    <button id="eu-btn-put"  class="tgl ${euType === 'put'  ? 'active' : ''}">Put</button>
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-title">Parameters</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">S&#8320; &mdash; spot price</span><span class="sl-val" id="eu-vl-s0">100</span></div>
+    <input type="range" id="eu-sl-s0" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">K &mdash; strike</span><span class="sl-val" id="eu-vl-K">100</span></div>
+    <input type="range" id="eu-sl-K" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">r &mdash; risk-free rate</span><span class="sl-val" id="eu-vl-r">0.050</span></div>
+    <input type="range" id="eu-sl-r" min="0.00" max="0.20" step="0.005" value="0.05">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&sigma; &mdash; volatility</span><span class="sl-val" id="eu-vl-sigma">0.20</span></div>
+    <input type="range" id="eu-sl-sigma" min="0.05" max="0.80" step="0.01" value="0.20">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">T &mdash; maturity (years)</span><span class="sl-val" id="eu-vl-T">1.00</span></div>
+    <input type="range" id="eu-sl-T" min="0.25" max="5.0" step="0.25" value="1.0">
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-card">
+    <div class="sb-card-lbl">Option Price</div>
+    <div class="sb-price" id="eu-price">&mdash;</div>
+    <div class="sb-price-sub" id="eu-price-sub">European Call</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">BS Internals</div>
+    <div class="sb-row"><span class="sb-key">d&#8321;</span><span class="sb-val" id="eu-d1">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">d&#8322;</span><span class="sb-val" id="eu-d2">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">&Phi;(d&#8321;)</span><span class="sb-val" id="eu-phi1">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">&Phi;(d&#8322;) = P(ITM)</span><span class="sb-val" id="eu-phi2">&mdash;</span></div>
+    <div class="sb-note">&Phi;(d&#8322;): risk-neutral probability<br>that S(T) &gt; K at expiry</div>
+  </div>
+</div>`;
+}
+
+function eurPanel() {
+  return `
+<div class="dual-wrap">
+  <div class="half-col">
+    <div class="chart-title">Terminal Distribution S(T)</div>
+    <div class="half-wrap"><canvas id="eu-hist"></canvas></div>
+    <div class="annot-bar" id="eu-annot">&nbsp;</div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title">Pricing Curve vs Spot</div>
+    <div class="half-wrap"><canvas id="eu-curve"></canvas></div>
+  </div>
+</div>`;
+}
+
+function renderEur() {
+  const S0    = +document.getElementById('eu-sl-s0').value;
+  const K     = +document.getElementById('eu-sl-K').value;
+  const r     = +document.getElementById('eu-sl-r').value;
+  const sigma = +document.getElementById('eu-sl-sigma').value;
+  const T     = +document.getElementById('eu-sl-T').value;
+  const isCall = euType === 'call';
+
+  const { d1, d2 } = bsD1D2(S0, K, r, sigma, T);
+  const callP = bsCall(S0, K, r, sigma, T);
+  const putP  = bsPut(S0, K, r, sigma, T);
+
+  document.getElementById('eu-price').textContent    = (isCall ? callP : putP).toFixed(4);
+  document.getElementById('eu-price-sub').textContent = isCall ? 'European Call' : 'European Put';
+  document.getElementById('eu-d1').textContent       = d1.toFixed(4);
+  document.getElementById('eu-d2').textContent       = d2.toFixed(4);
+  document.getElementById('eu-phi1').textContent     = (normalCDF(d1) * 100).toFixed(2) + '%';
+  document.getElementById('eu-phi2').textContent     = (normalCDF(d2) * 100).toFixed(2) + '%';
+
+  // 2000 terminal samples under risk-neutral measure
+  const muLn  = Math.log(S0) + (r - 0.5 * sigma * sigma) * T;
+  const sigLn = sigma * Math.sqrt(T);
+  const samples = Array.from({ length: 2000 }, () => Math.exp(muLn + sigLn * randn()));
+
+  // ── Chart A: histogram ──────────────────────────────
+  const { mids, densities, lo, hi } = makeHistogram(samples, 40);
+
+  const barColors = mids.map(m =>
+    (isCall ? m > K : m < K)
+      ? (isCall ? 'rgba(87,196,160,0.78)' : 'rgba(220,80,80,0.78)')
+      : 'rgba(80,95,140,0.32)'
+  );
+
+  const dxPts = Array.from({ length: 200 }, (_, i) => lo + i * (hi - lo) / 199);
+  const dyPts = dxPts.map(x => lognormalPDF(x, muLn, sigLn));
+
+  mkChart('eu-hist', {
+    type: 'bar',
+    data: {
+      datasets: [
+        {
+          label: 'S(T)',
+          data: mids.map((x, i) => ({ x, y: densities[i] })),
+          backgroundColor: barColors,
+          barPercentage: 1.0, categoryPercentage: 1.0,
+          order: 2,
+        },
+        {
+          type: 'line', label: 'Log-normal density',
+          data: dxPts.map((x, i) => ({ x, y: dyPts[i] })),
+          borderColor: 'rgba(240,245,255,0.82)', borderWidth: 1.8,
+          pointRadius: 0, fill: false, order: 1,
+        },
+      ],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(), tooltip: { enabled: false },
+        vlines: [{ xVal: K, color: 'rgba(255,210,80,0.85)', label: `K=${K}` }],
+      },
+      scales: {
+        x: xLinearScale('S(T)'),
+        y: yScale('Density', { min: 0 }),
+      },
+    },
+  });
+
+  // annotation
+  const itmSamp = isCall ? samples.filter(s => s > K) : samples.filter(s => s < K);
+  const itmPct  = (itmSamp.length / samples.length * 100).toFixed(1);
+  const avgPay  = itmSamp.length > 0 ? mean(itmSamp.map(s => isCall ? s - K : K - s)).toFixed(2) : '0.00';
+  document.getElementById('eu-annot').innerHTML =
+    `ITM: <b>${itmPct}%</b>&ensp;|&ensp;Avg payoff (ITM paths): <b>${avgPay}</b>`;
+
+  // ── Chart B: pricing curve ──────────────────────────
+  const lo2 = 0.5 * K, hi2 = 2.0 * K;
+  const spots = Array.from({ length: 100 }, (_, i) => lo2 + i * (hi2 - lo2) / 99);
+  const cCurve = spots.map(s => bsCall(s, K, r, sigma, T));
+  const pCurve = spots.map(s => bsPut(s, K, r, sigma, T));
+
+  mkChart('eu-curve', {
+    type: 'line',
+    data: {
+      datasets: [
+        { label: 'Call', data: spots.map((s, i) => ({ x: s, y: cCurve[i] })), borderColor: 'rgba(87,196,160,0.90)', borderWidth: 2, pointRadius: 0, fill: false },
+        { label: 'Put',  data: spots.map((s, i) => ({ x: s, y: pCurve[i] })), borderColor: 'rgba(220,80,80,0.90)',  borderWidth: 2, pointRadius: 0, fill: false },
+        { label: '', type: 'scatter', data: [{ x: S0, y: callP }], backgroundColor: 'rgba(87,196,160,1)', borderColor: '#eef', borderWidth: 2, pointRadius: 6 },
+        { label: '', type: 'scatter', data: [{ x: S0, y: putP  }], backgroundColor: 'rgba(220,80,80,1)',  borderColor: '#eef', borderWidth: 2, pointRadius: 6 },
+      ],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(), tooltip: { enabled: false },
+        vlines: [{ xVal: S0, color: 'rgba(200,210,255,0.40)', label: `S₀` }],
+      },
+      scales: {
+        x: xLinearScale('Spot price S₀'),
+        y: yScale('Option Price', { min: 0 }),
+      },
+    },
+  });
+}
+
+function initEur() {
+  ['eu-btn-call', 'eu-btn-put'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      euType = id === 'eu-btn-call' ? 'call' : 'put';
+      document.getElementById('eu-btn-call').classList.toggle('active', euType === 'call');
+      document.getElementById('eu-btn-put').classList.toggle('active',  euType === 'put');
+      renderEur();
+    });
+  });
+  const sliders = [
+    { sl: 'eu-sl-s0',    vl: 'eu-vl-s0',    fmt: v => Math.round(+v)  },
+    { sl: 'eu-sl-K',     vl: 'eu-vl-K',     fmt: v => Math.round(+v)  },
+    { sl: 'eu-sl-r',     vl: 'eu-vl-r',     fmt: v => (+v).toFixed(3) },
+    { sl: 'eu-sl-sigma', vl: 'eu-vl-sigma',  fmt: v => (+v).toFixed(2) },
+    { sl: 'eu-sl-T',     vl: 'eu-vl-T',     fmt: v => (+v).toFixed(2) },
+  ];
+  sliders.forEach(({ sl, vl, fmt }) => {
+    const el = document.getElementById(sl), ve = document.getElementById(vl);
+    el.addEventListener('input', () => { ve.textContent = fmt(el.value); renderEur(); });
+  });
+  renderEur();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB 3 — DIVIDENDS
+// ═══════════════════════════════════════════════════════
+
+function divSidebar() {
+  return `
+<div class="sb-section">
+  <div class="sb-title">Parameters</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">S&#8320; &mdash; spot price</span><span class="sl-val" id="dv-vl-s0">100</span></div>
+    <input type="range" id="dv-sl-s0" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">K &mdash; strike</span><span class="sl-val" id="dv-vl-K">100</span></div>
+    <input type="range" id="dv-sl-K" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">r &mdash; risk-free rate</span><span class="sl-val" id="dv-vl-r">0.050</span></div>
+    <input type="range" id="dv-sl-r" min="0.00" max="0.20" step="0.005" value="0.05">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&sigma; &mdash; volatility</span><span class="sl-val" id="dv-vl-sigma">0.20</span></div>
+    <input type="range" id="dv-sl-sigma" min="0.05" max="0.80" step="0.01" value="0.20">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">T &mdash; maturity (years)</span><span class="sl-val" id="dv-vl-T">1.00</span></div>
+    <input type="range" id="dv-sl-T" min="0.25" max="5.0" step="0.25" value="1.0">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&delta; &mdash; dividend yield</span><span class="sl-val" id="dv-vl-d">0.030</span></div>
+    <input type="range" id="dv-sl-d" min="0.00" max="0.15" step="0.005" value="0.03">
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-card">
+    <div class="sb-card-lbl">Call Price</div>
+    <div class="sb-row"><span class="sb-key">&delta; = 0</span><span class="sb-val" id="dv-call0">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">&delta; = <span id="dv-d-inl1">0.030</span></span><span class="sb-val" id="dv-callD">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">Difference</span><span class="sb-val clr-red" id="dv-callDiff">&mdash;</span></div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Put Price</div>
+    <div class="sb-row"><span class="sb-key">&delta; = 0</span><span class="sb-val" id="dv-put0">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">&delta; = <span id="dv-d-inl2">0.030</span></span><span class="sb-val" id="dv-putD">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">Difference</span><span class="sb-val clr-teal" id="dv-putDiff">&mdash;</span></div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">P(ITM) = &Phi;(d&#8322;)</div>
+    <div class="sb-row"><span class="sb-key">&delta; = 0</span><span class="sb-val" id="dv-itm0">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">With &delta;</span><span class="sb-val" id="dv-itmD">&mdash;</span></div>
+    <div class="sb-note">Dividends reduce the risk-neutral drift,<br>shifting S(T) left &rarr; lower P(ITM) for calls</div>
+  </div>
+</div>`;
+}
+
+function divPanel() {
+  return `
+<div class="dual-wrap">
+  <div class="half-col">
+    <div class="chart-title">Terminal Distribution: δ = 0 vs current δ</div>
+    <div class="half-wrap"><canvas id="dv-dist"></canvas></div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title">Option Price vs Dividend Yield δ</div>
+    <div class="half-wrap"><canvas id="dv-curve"></canvas></div>
+  </div>
+</div>`;
+}
+
+function renderDiv() {
+  const S0    = +document.getElementById('dv-sl-s0').value;
+  const K     = +document.getElementById('dv-sl-K').value;
+  const r     = +document.getElementById('dv-sl-r').value;
+  const sigma = +document.getElementById('dv-sl-sigma').value;
+  const T     = +document.getElementById('dv-sl-T').value;
+  const delta = +document.getElementById('dv-sl-d').value;
+
+  const call0 = bsCall(S0, K, r, sigma, T, 0);
+  const callD = bsCall(S0, K, r, sigma, T, delta);
+  const put0  = bsPut(S0, K, r, sigma, T, 0);
+  const putD  = bsPut(S0, K, r, sigma, T, delta);
+  const { d2: d2_0 } = bsD1D2(S0, K, r, sigma, T, 0);
+  const { d2: d2_D } = bsD1D2(S0, K, r, sigma, T, delta);
+  const dStr = delta.toFixed(3);
+
+  document.getElementById('dv-d-inl1').textContent  = dStr;
+  document.getElementById('dv-d-inl2').textContent  = dStr;
+  document.getElementById('dv-call0').textContent   = call0.toFixed(4);
+  document.getElementById('dv-callD').textContent   = callD.toFixed(4);
+  document.getElementById('dv-callDiff').textContent = (callD - call0).toFixed(4);
+  document.getElementById('dv-put0').textContent    = put0.toFixed(4);
+  document.getElementById('dv-putD').textContent    = putD.toFixed(4);
+  document.getElementById('dv-putDiff').textContent = '+' + (putD - put0).toFixed(4);
+  document.getElementById('dv-itm0').textContent    = (normalCDF(d2_0) * 100).toFixed(2) + '%';
+  document.getElementById('dv-itmD').textContent    = (normalCDF(d2_D) * 100).toFixed(2) + '%';
+
+  // ── Chart A: analytical density curves ─────────────
+  // risk-neutral drift: r - q - 0.5σ²
+  const muLn0 = Math.log(S0) + (r - 0     - 0.5 * sigma * sigma) * T;
+  const muLnD = Math.log(S0) + (r - delta - 0.5 * sigma * sigma) * T;
+  const sigLn = sigma * Math.sqrt(T);
+
+  // x-range that covers both densities
+  const xLo = S0 * Math.exp((Math.min(muLnD, muLn0) - Math.log(S0)) - 3.5 * sigLn);
+  const xHi = S0 * Math.exp((Math.max(muLnD, muLn0) - Math.log(S0)) + 3.5 * sigLn);
+  const xPts = Array.from({ length: 200 }, (_, i) => xLo + i * (xHi - xLo) / 199);
+
+  mkChart('dv-dist', {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'δ = 0',
+          data: xPts.map(x => ({ x, y: lognormalPDF(x, muLn0, sigLn) })),
+          borderColor: 'rgba(108,140,255,0.90)', backgroundColor: 'rgba(108,140,255,0.08)',
+          borderWidth: 2, pointRadius: 0, fill: 'origin', tension: 0.25,
+        },
+        {
+          label: `δ = ${dStr}`,
+          data: xPts.map(x => ({ x, y: lognormalPDF(x, muLnD, sigLn) })),
+          borderColor: 'rgba(232,150,60,0.90)', backgroundColor: 'rgba(232,150,60,0.08)',
+          borderWidth: 2, pointRadius: 0, fill: 'origin', tension: 0.25,
+        },
+      ],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(), tooltip: { enabled: false },
+        vlines: [{ xVal: K, color: 'rgba(255,210,80,0.85)', label: `K=${K}` }],
+      },
+      scales: {
+        x: xLinearScale('S(T)'),
+        y: yScale('Density', { min: 0 }),
+      },
+    },
+  });
+
+  // ── Chart B: price vs delta ─────────────────────────
+  const N_D = 61;
+  const deltas = Array.from({ length: N_D }, (_, i) => i * 0.15 / (N_D - 1));
+  const cArr = deltas.map(d => bsCall(S0, K, r, sigma, T, d));
+  const pArr = deltas.map(d => bsPut(S0, K, r, sigma, T, d));
+
+  mkChart('dv-curve', {
+    type: 'line',
+    data: {
+      datasets: [
+        { label: 'Call', data: deltas.map((d, i) => ({ x: d, y: cArr[i] })), borderColor: 'rgba(87,196,160,0.90)', borderWidth: 2, pointRadius: 0, fill: false },
+        { label: 'Put',  data: deltas.map((d, i) => ({ x: d, y: pArr[i] })), borderColor: 'rgba(220,80,80,0.90)',  borderWidth: 2, pointRadius: 0, fill: false },
+        { label: '', type: 'scatter', data: [{ x: delta, y: callD }], backgroundColor: 'rgba(87,196,160,1)', borderColor: '#eef', borderWidth: 2, pointRadius: 6 },
+        { label: '', type: 'scatter', data: [{ x: delta, y: putD  }], backgroundColor: 'rgba(220,80,80,1)',  borderColor: '#eef', borderWidth: 2, pointRadius: 6 },
+      ],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(), tooltip: { enabled: false },
+        vlines: [{ xVal: delta, color: 'rgba(200,210,255,0.40)', label: `δ` }],
+      },
+      scales: {
+        x: xLinearScale('Dividend yield δ'),
+        y: yScale('Option Price', { min: 0 }),
+      },
+    },
+  });
+}
+
+function initDiv() {
+  const sliders = [
+    { sl: 'dv-sl-s0',    vl: 'dv-vl-s0',    fmt: v => Math.round(+v)  },
+    { sl: 'dv-sl-K',     vl: 'dv-vl-K',     fmt: v => Math.round(+v)  },
+    { sl: 'dv-sl-r',     vl: 'dv-vl-r',     fmt: v => (+v).toFixed(3) },
+    { sl: 'dv-sl-sigma', vl: 'dv-vl-sigma',  fmt: v => (+v).toFixed(2) },
+    { sl: 'dv-sl-T',     vl: 'dv-vl-T',     fmt: v => (+v).toFixed(2) },
+    { sl: 'dv-sl-d',     vl: 'dv-vl-d',     fmt: v => (+v).toFixed(3) },
+  ];
+  sliders.forEach(({ sl, vl, fmt }) => {
+    const el = document.getElementById(sl), ve = document.getElementById(vl);
+    el.addEventListener('input', () => { ve.textContent = fmt(el.value); renderDiv(); });
+  });
+  renderDiv();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB 4 — ASIAN OPTIONS
+// ═══════════════════════════════════════════════════════
+
+let asOptType    = 'call';
+let asStrikeType = 'fixed';
+let _asPricePaths = null;
+let _asCacheKey   = '';
+
+const AS_ITM_PAL = [
+  [87,196,160],[100,215,178],[70,200,195],[110,225,165],[82,208,218],
+  [62,188,200],[96,212,174],[116,228,168],[74,196,210],[104,218,172],
+];
+const AS_OTM_PAL = [
+  [220,100,80],[235,130,68],[210,90,92],[240,148,78],[226,112,74],
+  [216,94,88],[232,122,70],[212,104,90],[236,140,74],[222,100,84],
+];
+
+function simulateAsianPaths(S0, r, sigma, T, n, nPaths) {
+  const dt  = T / n;
+  const nu  = (r - 0.5 * sigma * sigma) * dt;
+  const vol = sigma * Math.sqrt(dt);
+  const paths = [];
+  for (let i = 0; i < nPaths; i++) {
+    const p = new Float64Array(n + 1);
+    p[0] = S0;
+    for (let j = 1; j <= n; j++) p[j] = p[j-1] * Math.exp(nu + vol * randn());
+    paths.push(p);
+  }
+  return paths;
+}
+
+function asArithAvg(path) {
+  const n = path.length - 1;
+  let s = 0;
+  for (let j = 1; j <= n; j++) s += path[j];
+  return s / n;
+}
+
+function asPayoff(path, K, isCall, isFixed) {
+  const avg = asArithAvg(path), terminal = path[path.length - 1];
+  if (isFixed) return isCall ? Math.max(avg - K, 0) : Math.max(K - avg, 0);
+  return isCall ? Math.max(terminal - avg, 0) : Math.max(avg - terminal, 0);
+}
+
+function asITM(path, K, isCall, isFixed) {
+  const avg = asArithAvg(path), terminal = path[path.length - 1];
+  if (isFixed) return isCall ? avg > K : avg < K;
+  return isCall ? terminal > avg : avg > terminal;
+}
+
+function asianSidebar() {
+  return `
+<div class="sb-section">
+  <div class="sb-title">Option Type</div>
+  <div class="tgl-group">
+    <button id="as-btn-call"  class="tgl ${asOptType === 'call' ? 'active' : ''}">Call</button>
+    <button id="as-btn-put"   class="tgl ${asOptType === 'put'  ? 'active' : ''}">Put</button>
+  </div>
+  <div class="sb-title">Strike Type</div>
+  <div class="tgl-group">
+    <button id="as-btn-fixed" class="tgl ${asStrikeType === 'fixed'    ? 'active' : ''}">Fixed</button>
+    <button id="as-btn-float" class="tgl ${asStrikeType === 'floating' ? 'active' : ''}">Floating</button>
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-title">Parameters</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">S&#8320; &mdash; spot price</span><span class="sl-val" id="as-vl-s0">100</span></div>
+    <input type="range" id="as-sl-s0" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">K &mdash; strike</span><span class="sl-val" id="as-vl-K">100</span></div>
+    <input type="range" id="as-sl-K" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">r &mdash; risk-free rate</span><span class="sl-val" id="as-vl-r">0.050</span></div>
+    <input type="range" id="as-sl-r" min="0.00" max="0.20" step="0.005" value="0.05">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&sigma; &mdash; volatility</span><span class="sl-val" id="as-vl-sigma">0.20</span></div>
+    <input type="range" id="as-sl-sigma" min="0.05" max="0.80" step="0.01" value="0.20">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">T &mdash; maturity (years)</span><span class="sl-val" id="as-vl-T">1.00</span></div>
+    <input type="range" id="as-sl-T" min="0.25" max="5.0" step="0.25" value="1.0">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">n &mdash; monitoring dates</span><span class="sl-val" id="as-vl-n">12</span></div>
+    <input type="range" id="as-sl-n" min="4" max="52" step="4" value="12">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">Paths shown</span><span class="sl-val" id="as-vl-vis">8</span></div>
+    <input type="range" id="as-sl-vis" min="1" max="20" step="1" value="8">
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-card">
+    <div class="sb-card-lbl">Asian MC Price</div>
+    <div class="sb-price" id="as-price">&mdash;</div>
+    <div class="sb-price-sub" id="as-price-sub">Fixed Call (N=2000)</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Comparison</div>
+    <div class="sb-row"><span class="sb-key">European BS</span><span class="sb-val" id="as-eu-price">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">Asian discount</span><span class="sb-val clr-teal" id="as-discount">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">ITM probability</span><span class="sb-val" id="as-itm-pct">&mdash;</span></div>
+    <div class="sb-note" id="as-note">Averaging reduces variance &rarr; Asian &le; European</div>
+  </div>
+</div>`;
+}
+
+function asianPanel() {
+  return `
+<div class="dual-wrap">
+  <div class="half-col">
+    <div class="chart-title">Sample Paths &amp; Arithmetic Averages</div>
+    <div class="half-wrap"><canvas id="as-paths"></canvas></div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title">Distribution: Averages vs Terminal Prices</div>
+    <div class="half-wrap"><canvas id="as-dist"></canvas></div>
+    <div class="annot-bar" id="as-annot">&nbsp;</div>
+  </div>
+</div>`;
+}
+
+function renderAsian() {
+  const S0      = +document.getElementById('as-sl-s0').value;
+  const K       = +document.getElementById('as-sl-K').value;
+  const r       = +document.getElementById('as-sl-r').value;
+  const sigma   = +document.getElementById('as-sl-sigma').value;
+  const T       = +document.getElementById('as-sl-T').value;
+  const n       = +document.getElementById('as-sl-n').value;
+  const nVis    = +document.getElementById('as-sl-vis').value;
+  const isCall  = asOptType    === 'call';
+  const isFixed = asStrikeType === 'fixed';
+
+  // ── 2000 paths: pricing + Chart B (cached on pricing params) ──
+  const cacheKey = `${S0}|${r}|${sigma}|${T}|${n}`;
+  if (cacheKey !== _asCacheKey) {
+    _asPricePaths = simulateAsianPaths(S0, r, sigma, T, n, 2000);
+    _asCacheKey   = cacheKey;
+  }
+  const pricePaths = _asPricePaths;
+  const disc       = Math.exp(-r * T);
+  const asPrice    = disc * mean(pricePaths.map(p => asPayoff(p, K, isCall, isFixed)));
+  const euPrice    = isCall ? bsCall(S0, K, r, sigma, T) : bsPut(S0, K, r, sigma, T);
+  const discount   = euPrice - asPrice;
+  const itmCnt     = pricePaths.filter(p => asITM(p, K, isCall, isFixed)).length;
+  const itmPct     = (itmCnt / pricePaths.length * 100).toFixed(1);
+
+  const optLabel   = (isFixed ? 'Fixed' : 'Floating') + ' ' + (isCall ? 'Call' : 'Put');
+  document.getElementById('as-price').textContent     = asPrice.toFixed(4);
+  document.getElementById('as-price-sub').textContent = optLabel + ' (N=2000)';
+  document.getElementById('as-eu-price').textContent  = euPrice.toFixed(4);
+  document.getElementById('as-discount').textContent  = discount.toFixed(4);
+  document.getElementById('as-itm-pct').textContent   = itmPct + '%';
+  document.getElementById('as-note').innerHTML        = isFixed
+    ? 'Averaging reduces variance &rarr; Asian &le; European'
+    : 'Floating: strike = arithmetic avg of the path';
+
+  // ── Chart A: nVis display paths ────────────────────────
+  const visPaths = simulateAsianPaths(S0, r, sigma, T, n, nVis);
+  const datasets = [];
+  let itmIdx = 0, otmIdx = 0;
+
+  visPaths.forEach(path => {
+    const avg = asArithAvg(path);
+    const itm = asITM(path, K, isCall, isFixed);
+    const pal = itm ? AS_ITM_PAL : AS_OTM_PAL;
+    const ci  = itm ? (itmIdx++ % pal.length) : (otmIdx++ % pal.length);
+    const [pr, pg, pb] = pal[ci];
+    const pc  = `rgba(${pr},${pg},${pb},0.65)`;
+    const ac  = `rgba(${pr},${pg},${pb},0.38)`;
+
+    // path line
+    datasets.push({
+      label: '',
+      data: Array.from({length: n + 1}, (_, j) => ({ x: j * T / n, y: path[j] })),
+      borderColor: pc, borderWidth: 1.4, pointRadius: 0, fill: false,
+    });
+    // arithmetic average as horizontal dashed line
+    datasets.push({
+      label: '',
+      data: [{ x: 0, y: avg }, { x: T, y: avg }],
+      borderColor: ac, borderWidth: 1.2, borderDash: [4, 4], pointRadius: 0, fill: false,
+    });
+  });
+
+  // theoretical mean
+  datasets.push({
+    label: 'E[S(t)]=S₀e^(rt)',
+    data: Array.from({length: n + 1}, (_, j) => ({ x: j * T / n, y: S0 * Math.exp(r * j * T / n) })),
+    borderColor: 'rgba(240,245,255,0.88)', borderWidth: 2.2, pointRadius: 0, fill: false,
+  });
+
+  // strike line
+  datasets.push({
+    label: isFixed ? `K=${K}` : `K=${K} (European)`,
+    data: [{ x: 0, y: K }, { x: T, y: K }],
+    borderColor: 'rgba(255,210,80,0.65)', borderWidth: 1.3, borderDash: [6, 4], pointRadius: 0, fill: false,
+  });
+
+  mkChart('as-paths', {
+    type: 'line',
+    data: { datasets },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'none' },
+      plugins: { legend: legendOpts(), tooltip: { enabled: false }, vlines: [] },
+      scales: {
+        x: xLinearScale('Time (years)'),
+        y: yScale('S(t)'),
+      },
+    },
+  });
+
+  // ── Chart B: distribution comparison ──────────────────
+  const avgs      = pricePaths.map(asArithAvg);
+  const terminals = pricePaths.map(p => p[n]);
+
+  const allVals = [...avgs, ...terminals];
+  const dlo = Math.min(...allVals) * 0.96;
+  const dhi = Math.max(...allVals) * 1.04;
+  const dbw = (dhi - dlo) / 50;
+
+  function toBins(vals) {
+    const cts = new Array(50).fill(0);
+    vals.forEach(v => { const b = Math.min(Math.floor((v - dlo) / dbw), 49); cts[b]++; });
+    return cts.map(c => c / (vals.length * dbw));
+  }
+
+  const dmids   = Array.from({length: 50}, (_, i) => dlo + (i + 0.5) * dbw);
+  const avgDens = toBins(avgs);
+  const trmDens = toBins(terminals);
+
+  mkChart('as-dist', {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Arith. avg A_n',
+          data: dmids.map((x, i) => ({ x, y: avgDens[i] })),
+          borderColor: 'rgba(108,140,255,0.90)', backgroundColor: 'rgba(108,140,255,0.13)',
+          borderWidth: 2, pointRadius: 0, fill: 'origin', tension: 0.3,
+        },
+        {
+          label: 'Terminal S(T)',
+          data: dmids.map((x, i) => ({ x, y: trmDens[i] })),
+          borderColor: 'rgba(170,170,195,0.55)', backgroundColor: 'rgba(130,130,160,0.07)',
+          borderWidth: 1.5, pointRadius: 0, fill: 'origin', tension: 0.3,
+        },
+      ],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(), tooltip: { enabled: false },
+        vlines: isFixed ? [{ xVal: K, color: 'rgba(255,210,80,0.85)', label: `K=${K}` }] : [],
+      },
+      scales: {
+        x: xLinearScale('Value'),
+        y: yScale('Density', { min: 0 }),
+      },
+    },
+  });
+
+  document.getElementById('as-annot').innerHTML =
+    `Asian: <b>$${asPrice.toFixed(4)}</b>&ensp;|&ensp;European: <b>$${euPrice.toFixed(4)}</b>&ensp;|&ensp;Discount: <b>$${discount.toFixed(4)}</b>`;
+}
+
+function initAsian() {
+  ['as-btn-call', 'as-btn-put'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      asOptType = id === 'as-btn-call' ? 'call' : 'put';
+      document.getElementById('as-btn-call').classList.toggle('active', asOptType === 'call');
+      document.getElementById('as-btn-put').classList.toggle('active',  asOptType === 'put');
+      renderAsian();
+    });
+  });
+  ['as-btn-fixed', 'as-btn-float'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      asStrikeType = id === 'as-btn-fixed' ? 'fixed' : 'floating';
+      document.getElementById('as-btn-fixed').classList.toggle('active', asStrikeType === 'fixed');
+      document.getElementById('as-btn-float').classList.toggle('active', asStrikeType === 'floating');
+      renderAsian();
+    });
+  });
+  const sliders = [
+    { sl: 'as-sl-s0',    vl: 'as-vl-s0',    fmt: v => Math.round(+v)  },
+    { sl: 'as-sl-K',     vl: 'as-vl-K',     fmt: v => Math.round(+v)  },
+    { sl: 'as-sl-r',     vl: 'as-vl-r',     fmt: v => (+v).toFixed(3) },
+    { sl: 'as-sl-sigma', vl: 'as-vl-sigma',  fmt: v => (+v).toFixed(2) },
+    { sl: 'as-sl-T',     vl: 'as-vl-T',     fmt: v => (+v).toFixed(2) },
+    { sl: 'as-sl-n',     vl: 'as-vl-n',     fmt: v => Math.round(+v)  },
+    { sl: 'as-sl-vis',   vl: 'as-vl-vis',   fmt: v => Math.round(+v)  },
+  ];
+  sliders.forEach(({ sl, vl, fmt }) => {
+    const el = document.getElementById(sl), ve = document.getElementById(vl);
+    el.addEventListener('input', () => { ve.textContent = fmt(el.value); renderAsian(); });
+  });
+  renderAsian();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB 5 — BARRIER OPTIONS
+// ═══════════════════════════════════════════════════════
+
+let brType = 'call';
+
+function simulateBrPaths(S0, r, sigma, T, nSteps, nPaths, Hlo, Hup) {
+  const dt = T / nSteps, nu = (r - 0.5 * sigma * sigma) * dt, vol = sigma * Math.sqrt(dt);
+  return Array.from({ length: nPaths }, () => {
+    const p = new Float64Array(nSteps + 1);
+    p[0] = S0;
+    let koStep = -1;
+    for (let j = 1; j <= nSteps; j++) {
+      p[j] = p[j - 1] * Math.exp(nu + vol * randn());
+      if (koStep < 0) {
+        if (Hlo > 0 && p[j] <= Hlo) koStep = j;
+        else if (Hup < 999 && p[j] >= Hup) koStep = j;
+      }
+    }
+    return { path: p, koStep };
+  });
+}
+
+function prop523DOC(S0, K, r, sigma, T, H) {
+  if (H <= 0 || S0 <= H) return 0;
+  const alpha = 2 * r / (sigma * sigma);
+  const ratio = H / S0, sqT = Math.sqrt(T), sig = sigma * sqT;
+  if (K >= H) {
+    const d3 = (Math.log(S0 / K) + (r + 0.5 * sigma * sigma) * T) / sig;
+    const d4 = (Math.log(K / S0) + (r + 0.5 * sigma * sigma) * T) / sig;
+    return S0 * normalCDF(d3) - K * Math.exp(-r * T) * normalCDF(d3 - sig)
+         - S0 * Math.pow(ratio, alpha + 1) * normalCDF(d4)
+         + Math.exp(-r * T) * K * Math.pow(ratio, alpha - 1) * normalCDF(d4 - sig);
+  } else {
+    const d1 = (Math.log(S0 / H) + (r + 0.5 * sigma * sigma) * T) / sig;
+    const d2 = (Math.log(H / S0) + (r + 0.5 * sigma * sigma) * T) / sig;
+    return S0 * normalCDF(d1) - K * Math.exp(-r * T) * normalCDF(d1 - sig)
+         - S0 * Math.pow(ratio, alpha + 1) * normalCDF(d2)
+         + Math.exp(-r * T) * K * Math.pow(ratio, alpha - 1) * normalCDF(d2 - sig);
+  }
+}
+
+function rrUOC(S0, K, r, sigma, T, H) {
+  if (H <= S0) return 0;   // stock starts at or above barrier
+  if (K >= H)  return 0;   // any payoff region requires crossing H first
+  const alpha = 2 * r / (sigma * sigma);
+  const ratio = H / S0;
+  const sig   = sigma * Math.sqrt(T);
+  const x1 = (Math.log(S0 / K) + (r + 0.5 * sigma * sigma) * T) / sig;
+  const x2 = (Math.log(S0 / H) + (r + 0.5 * sigma * sigma) * T) / sig;
+  const y1 = (Math.log(H * H / (S0 * K)) + (r + 0.5 * sigma * sigma) * T) / sig;
+  const y2 = (Math.log(H / S0) + (r + 0.5 * sigma * sigma) * T) / sig;
+  const A = S0 * normalCDF(x1)  - K * Math.exp(-r * T) * normalCDF(x1 - sig);
+  const B = S0 * normalCDF(x2)  - K * Math.exp(-r * T) * normalCDF(x2 - sig);
+  const C = S0 * Math.pow(ratio, alpha + 1) * normalCDF(-y1) - K * Math.exp(-r * T) * Math.pow(ratio, alpha - 1) * normalCDF(-y1 + sig);
+  const D = S0 * Math.pow(ratio, alpha + 1) * normalCDF(-y2) - K * Math.exp(-r * T) * Math.pow(ratio, alpha - 1) * normalCDF(-y2 + sig);
+  return Math.max(A - B + C - D, 0);
+}
+
+function barrierTypeInfo(Hlo, Hup) {
+  const hasLo = Hlo > 0, hasHi = Hup < 999;
+  if (hasLo && hasHi) return { label: 'Double',   cls: 'badge-double' };
+  if (hasLo)          return { label: 'Down-Out', cls: 'badge-down'   };
+  if (hasHi)          return { label: 'Up-Out',   cls: 'badge-up'     };
+  return               { label: 'Vanilla',        cls: 'badge-none'   };
+}
+
+function barrierSidebar() {
+  return `
+<div class="sb-section">
+  <div class="sb-title">Option Type &nbsp;<span id="br-badge" class="barrier-badge badge-down">Down-Out</span></div>
+  <div class="tgl-group">
+    <button id="br-btn-call" class="tgl ${brType === 'call' ? 'active' : ''}">Call</button>
+    <button id="br-btn-put"  class="tgl ${brType === 'put'  ? 'active' : ''}">Put</button>
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-title">Parameters</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">S&#8320; &mdash; spot</span><span class="sl-val" id="br-vl-s0">100</span></div>
+    <input type="range" id="br-sl-s0" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">K &mdash; strike</span><span class="sl-val" id="br-vl-K">100</span></div>
+    <input type="range" id="br-sl-K" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">r &mdash; risk-free rate</span><span class="sl-val" id="br-vl-r">0.050</span></div>
+    <input type="range" id="br-sl-r" min="0.00" max="0.20" step="0.005" value="0.05">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&sigma; &mdash; volatility</span><span class="sl-val" id="br-vl-sigma">0.20</span></div>
+    <input type="range" id="br-sl-sigma" min="0.05" max="0.80" step="0.01" value="0.20">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">T &mdash; maturity (years)</span><span class="sl-val" id="br-vl-T">1.00</span></div>
+    <input type="range" id="br-sl-T" min="0.25" max="3.0" step="0.25" value="1.0">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">H&#8321; (down barrier)</span><span class="sl-val" id="br-vl-Hlo">80</span></div>
+    <input type="range" id="br-sl-Hlo" min="0" max="120" step="1" value="80">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">H&#8322; (up barrier)</span><span class="sl-val" id="br-vl-Hup">inactive</span></div>
+    <input type="range" id="br-sl-Hup" min="100" max="250" step="1" value="250">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">Paths shown</span><span class="sl-val" id="br-vl-vis">10</span></div>
+    <input type="range" id="br-sl-vis" min="3" max="20" step="1" value="10">
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-card">
+    <div class="sb-card-lbl">MC Price (N=2000)</div>
+    <div class="sb-price" id="br-mc-price">&mdash;</div>
+    <div class="sb-price-sub" id="br-mc-ci">95% CI: &mdash;</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Analytical (continuous barrier)</div>
+    <div class="sb-price" id="br-an-price">&mdash;</div>
+    <div class="sb-price-sub" id="br-an-sub">&mdash;</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Survival Rate</div>
+    <div class="sb-price" id="br-surv-pct">&mdash;</div>
+    <div class="progress-wrap"><div class="progress-fill" id="br-surv-bar" style="width:0%"></div></div>
+    <div class="sb-price-sub" id="br-surv-sub">&mdash; / 2000 survived</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Payoff Stats</div>
+    <div class="sb-row"><span class="sb-key">Mean payoff</span><span class="sb-val" id="br-stat-mean">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">Std dev</span><span class="sb-val" id="br-stat-std">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key">ITM (survivors)</span><span class="sb-val" id="br-stat-itm">&mdash;</span></div>
+  </div>
+</div>`;
+}
+
+function barrierPanel() {
+  return `
+<div class="dual-wrap">
+  <div class="half-col">
+    <div class="chart-title">A &mdash; Sample Paths (&times; = Knock-Out)</div>
+    <div class="half-wrap"><canvas id="br-paths"></canvas></div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title">B &mdash; Terminal S(T) Distribution</div>
+    <div class="half-wrap"><canvas id="br-dist"></canvas></div>
+  </div>
+</div>
+<div class="annot-bar" id="br-annot">&nbsp;</div>`;
+}
+
+function renderBarrier() {
+  const S0     = +document.getElementById('br-sl-s0').value;
+  const K      = +document.getElementById('br-sl-K').value;
+  const r      = +document.getElementById('br-sl-r').value;
+  const sigma  = +document.getElementById('br-sl-sigma').value;
+  const T      = +document.getElementById('br-sl-T').value;
+  const HloRaw = +document.getElementById('br-sl-Hlo').value;
+  const HupRaw = +document.getElementById('br-sl-Hup').value;
+  const nVis   = +document.getElementById('br-sl-vis').value;
+
+  const Hlo = HloRaw, Hup = HupRaw >= 250 ? 999 : HupRaw;
+  const isCall = brType === 'call', nSteps = 52, N = 2000;
+
+  const results = simulateBrPaths(S0, r, sigma, T, nSteps, N, Hlo, Hup);
+  const disc    = Math.exp(-r * T);
+  const payoffs = results.map(res => {
+    if (res.koStep >= 0) return 0;
+    const ST = res.path[nSteps];
+    return isCall ? Math.max(ST - K, 0) : Math.max(K - ST, 0);
+  });
+  const payMean = mean(payoffs);
+  const payStd  = stddev(payoffs, payMean);
+  const mcPrice = disc * payMean;
+  const mcCI    = 1.96 * payStd / Math.sqrt(N);
+
+  const survivors  = results.filter(res => res.koStep < 0);
+  const knockedOut = results.filter(res => res.koStep >= 0);
+  const nSurv      = survivors.length;
+  const survRate   = nSurv / N;
+
+  const isDOCCall  = Hlo > 0  && Hup >= 999 && isCall;
+  const isUOCCall  = Hlo <= 0 && Hup < 999  && isCall;
+  const isDouble   = Hlo > 0  && Hup < 999;
+  const isVanilla  = Hlo <= 0 && Hup >= 999;
+  let analyticalPrice = null;
+  let analyticalSub;
+  if (isDOCCall) {
+    analyticalPrice = prop523DOC(S0, K, r, sigma, T, Hlo);
+    analyticalSub   = 'Prop. 5.23 (continuous, DOC)';
+  } else if (isUOCCall) {
+    analyticalPrice = rrUOC(S0, K, r, sigma, T, Hup);
+    analyticalSub   = K >= Hup ? 'R–R: K ≥ H₂ (= 0 exactly)' : 'Reiner–Rubinstein (continuous, UOC)';
+  } else if (isVanilla) {
+    analyticalSub   = 'N/A — no barrier active';
+  } else if (isDouble) {
+    analyticalSub   = 'No closed form for double barrier';
+  } else {
+    analyticalSub   = 'Call only — no put formula';
+  }
+
+  const nITM   = survivors.filter(res => isCall ? res.path[nSteps] > K : res.path[nSteps] < K).length;
+  const pctITM = nSurv > 0 ? (nITM / nSurv * 100).toFixed(1) : '0.0';
+
+  // ── Sidebar updates ──
+  const bti = barrierTypeInfo(Hlo, Hup);
+  const badge = document.getElementById('br-badge');
+  badge.textContent = bti.label; badge.className = 'barrier-badge ' + bti.cls;
+
+  document.getElementById('br-mc-price').textContent = '$' + mcPrice.toFixed(4);
+  document.getElementById('br-mc-ci').textContent    = '95% CI: \xb1$' + mcCI.toFixed(4);
+  document.getElementById('br-an-price').textContent = analyticalPrice !== null ? '$' + analyticalPrice.toFixed(4) : 'N/A';
+  document.getElementById('br-an-sub').textContent   = analyticalSub;
+  document.getElementById('br-surv-pct').textContent = (survRate * 100).toFixed(1) + '%';
+  document.getElementById('br-surv-bar').style.width = (survRate * 100).toFixed(1) + '%';
+  document.getElementById('br-surv-sub').textContent = nSurv + ' / ' + N + ' survived';
+  document.getElementById('br-stat-mean').textContent = payMean.toFixed(4);
+  document.getElementById('br-stat-std').textContent  = payStd.toFixed(4);
+  document.getElementById('br-stat-itm').textContent  = pctITM + '%';
+
+  // ── Chart A: paths ──
+  const nShowSurv = Math.min(Math.ceil(nVis * 0.6), nSurv);
+  const nShowKO   = Math.min(nVis - nShowSurv, knockedOut.length);
+  const dispSurv  = survivors.slice(0, nShowSurv);
+  const dispKO    = knockedOut.slice(0, nShowKO);
+  const pathDS    = [];
+  const corrClr   = 'rgba(80,180,100,0.7)';
+
+  if (Hlo > 0 && Hup < 999) {
+    pathDS.push({ label: 'H₁=' + Hlo, data: [{x:0,y:Hlo},{x:T,y:Hlo}], borderColor: corrClr, borderWidth: 1.5, borderDash: [5,3], pointRadius: 0, fill: '+1', backgroundColor: 'rgba(80,180,100,0.07)', order: 10 });
+    pathDS.push({ label: '',               data: [{x:0,y:Hup},{x:T,y:Hup}], borderColor: corrClr, borderWidth: 1.5, borderDash: [5,3], pointRadius: 0, fill: false, order: 10 });
+  } else if (Hlo > 0) {
+    pathDS.push({ label: 'H=' + Hlo, data: [{x:0,y:Hlo},{x:T,y:Hlo}], borderColor: corrClr, borderWidth: 1.5, borderDash: [5,3], pointRadius: 0, fill: false, order: 10 });
+  } else if (Hup < 999) {
+    pathDS.push({ label: 'H=' + Hup, data: [{x:0,y:Hup},{x:T,y:Hup}], borderColor: corrClr, borderWidth: 1.5, borderDash: [5,3], pointRadius: 0, fill: false, order: 10 });
+  }
+
+  pathDS.push({ label: 'K=' + K, data: [{x:0,y:K},{x:T,y:K}], borderColor: 'rgba(255,210,80,0.55)', borderWidth: 1.2, borderDash: [6,4], pointRadius: 0, fill: false, order: 9 });
+  pathDS.push({ label: '', data: Array.from({length:21}, (_,i) => ({x:i*T/20, y:S0*Math.exp(r*i*T/20)})), borderColor: 'rgba(240,245,255,0.38)', borderWidth: 1.5, pointRadius: 0, fill: false, order: 8 });
+
+  dispSurv.forEach(res => pathDS.push({
+    label: '', data: Array.from({length:nSteps+1}, (_,j) => ({x:j*T/nSteps, y:res.path[j]})),
+    borderColor: 'rgba(79,195,195,0.55)', borderWidth: 1.2, pointRadius: 0, fill: false, order: 5,
+  }));
+
+  dispKO.forEach(res => {
+    pathDS.push({
+      label: '', data: Array.from({length:res.koStep+1}, (_,j) => ({x:j*T/nSteps, y:res.path[j]})),
+      borderColor: 'rgba(255,120,80,0.5)', borderWidth: 1.2, pointRadius: 0, fill: false, order: 5,
+    });
+    pathDS.push({
+      type: 'scatter', label: '',
+      data: [{ x: res.koStep * T / nSteps, y: res.path[res.koStep] }],
+      backgroundColor: 'rgba(255,80,40,0.9)', borderColor: 'rgba(255,80,40,0.9)',
+      pointStyle: 'crossRot', pointRadius: 7, borderWidth: 2.5, order: 1,
+    });
+  });
+
+  mkChart('br-paths', {
+    type: 'line',
+    data: { datasets: pathDS },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'none' },
+      plugins: { legend: legendOpts(), tooltip: { enabled: false }, vlines: [] },
+      scales: { x: xLinearScale('Time (years)'), y: yScale('S(t)') },
+    },
+  });
+
+  // ── Chart B: terminal distributions ──
+  const allTerminals = results.map(res => res.path[nSteps]);
+  const dlo = Math.min(...allTerminals) * 0.97;
+  const dhi = Math.max(...allTerminals) * 1.03;
+  const dbw = (dhi - dlo) / 50 || 1;
+  const dmids = Array.from({length: 50}, (_, i) => dlo + (i + 0.5) * dbw);
+  const toBins = (vals, denom) => {
+    const cts = new Array(50).fill(0);
+    vals.forEach(v => { const b = Math.min(Math.floor((v - dlo) / dbw), 49); if (b >= 0) cts[b]++; });
+    return cts.map(c => c / (denom * dbw));
+  };
+
+  const allBins = toBins(allTerminals, N);
+  const distDS  = [{
+    label: 'All paths',
+    data: dmids.map((x, i) => ({ x, y: allBins[i] })),
+    borderColor: 'rgba(108,140,255,0.85)', backgroundColor: 'rgba(108,140,255,0.10)',
+    borderWidth: 2, pointRadius: 0, fill: 'origin', tension: 0.3,
+  }];
+
+  if (nSurv >= 10) {
+    const survTerminals = survivors.map(res => res.path[nSteps]);
+    const survBins = toBins(survTerminals, N);
+    distDS.push({
+      label: 'Survivors',
+      data: dmids.map((x, i) => ({ x, y: survBins[i] })),
+      borderColor: 'rgba(79,195,195,0.85)', backgroundColor: 'rgba(79,195,195,0.10)',
+      borderWidth: 2, pointRadius: 0, fill: 'origin', tension: 0.3,
+    });
+  }
+
+  mkChart('br-dist', {
+    type: 'line',
+    data: { datasets: distDS },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(), tooltip: { enabled: false },
+        vlines: [{ xVal: K, color: 'rgba(255,210,80,0.7)', label: 'K=' + K }],
+      },
+      scales: { x: xLinearScale('S(T)'), y: yScale('Density', { min: 0 }) },
+    },
+  });
+
+  let annot = `MC: <b>$${mcPrice.toFixed(4)}</b>&ensp;|&ensp;`;
+  if (analyticalPrice !== null) annot += `Analytical: <b>$${analyticalPrice.toFixed(4)}</b>&ensp;|&ensp;`;
+  annot += `Survival: <b>${(survRate * 100).toFixed(1)}%</b>&ensp;(${nSurv}/${N})`;
+  document.getElementById('br-annot').innerHTML = annot;
+}
+
+function initBarrier() {
+  ['br-btn-call', 'br-btn-put'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      brType = id === 'br-btn-call' ? 'call' : 'put';
+      document.getElementById('br-btn-call').classList.toggle('active', brType === 'call');
+      document.getElementById('br-btn-put').classList.toggle('active',  brType === 'put');
+      renderBarrier();
+    });
+  });
+  const sliders = [
+    { sl: 'br-sl-s0',    vl: 'br-vl-s0',    fmt: v => Math.round(+v) },
+    { sl: 'br-sl-K',     vl: 'br-vl-K',     fmt: v => Math.round(+v) },
+    { sl: 'br-sl-r',     vl: 'br-vl-r',     fmt: v => (+v).toFixed(3) },
+    { sl: 'br-sl-sigma', vl: 'br-vl-sigma',  fmt: v => (+v).toFixed(2) },
+    { sl: 'br-sl-T',     vl: 'br-vl-T',     fmt: v => (+v).toFixed(2) },
+    { sl: 'br-sl-Hlo',   vl: 'br-vl-Hlo',   fmt: v => +v <= 0 ? 'inactive' : Math.round(+v) },
+    { sl: 'br-sl-Hup',   vl: 'br-vl-Hup',   fmt: v => +v >= 250 ? 'inactive' : Math.round(+v) },
+    { sl: 'br-sl-vis',   vl: 'br-vl-vis',   fmt: v => Math.round(+v) },
+  ];
+  sliders.forEach(({ sl, vl, fmt }) => {
+    const el = document.getElementById(sl), ve = document.getElementById(vl);
+    el.addEventListener('input', () => { ve.textContent = fmt(el.value); renderBarrier(); });
+  });
+  renderBarrier();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB 6 — EXOTIC OPTIONS
+// ═══════════════════════════════════════════════════════
+
+let exSubTab = 'lbfixed';
+
+function exSim(S0, r, sigma, T, n, nPaths) {
+  const dt = T/n, nu = (r - 0.5*sigma*sigma)*dt, vol = sigma*Math.sqrt(dt);
+  return Array.from({length: nPaths}, () => {
+    const p = new Float64Array(n+1);
+    p[0] = S0;
+    for (let j=1; j<=n; j++) p[j] = p[j-1]*Math.exp(nu + vol*randn());
+    return p;
+  });
+}
+
+function pMax(p) { let m=p[0]; for(let i=1;i<p.length;i++) if(p[i]>m) m=p[i]; return m; }
+function pMin(p) { let m=p[0]; for(let i=1;i<p.length;i++) if(p[i]<m) m=p[i]; return m; }
+function lbfPay(p, K)  { return Math.max(pMax(p)-K, 0); }
+function lbflPay(p)     { return p[p.length-1] - pMin(p); }
+function cliqPay(p) {
+  let s=0;
+  for (let i=1; i<p.length; i++) s += Math.max(p[i]/p[i-1]-1, 0);
+  return s;
+}
+
+function exoticSidebar() {
+  return `
+<div class="sb-section">
+  <div class="sb-title">Exotic Type</div>
+  <div class="ex-stab-row">
+    <button id="ex-btn-lbfixed" class="ex-stab${exSubTab==='lbfixed'?' active':''}">Fixed</button>
+    <button id="ex-btn-lbfloat" class="ex-stab${exSubTab==='lbfloat'?' active':''}">Floating</button>
+    <button id="ex-btn-cliquet" class="ex-stab${exSubTab==='cliquet'?' active':''}">Cliquet</button>
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-title">Parameters</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">S&#8320; &mdash; spot</span><span class="sl-val" id="ex-vl-s0">100</span></div>
+    <input type="range" id="ex-sl-s0" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap" id="ex-k-wrap">
+    <div class="sl-row"><span class="sl-name">K &mdash; strike</span><span class="sl-val" id="ex-vl-K">100</span></div>
+    <input type="range" id="ex-sl-K" min="50" max="200" step="1" value="100">
+    <div class="sb-note" id="ex-k-note" style="margin-top:3px"></div>
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">r &mdash; risk-free rate</span><span class="sl-val" id="ex-vl-r">0.050</span></div>
+    <input type="range" id="ex-sl-r" min="0.00" max="0.20" step="0.005" value="0.05">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">&sigma; &mdash; volatility</span><span class="sl-val" id="ex-vl-sigma">0.20</span></div>
+    <input type="range" id="ex-sl-sigma" min="0.05" max="0.80" step="0.01" value="0.20">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">T &mdash; maturity (years)</span><span class="sl-val" id="ex-vl-T">1.00</span></div>
+    <input type="range" id="ex-sl-T" min="0.25" max="5.0" step="0.25" value="1.0">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">n &mdash; monitoring steps</span><span class="sl-val" id="ex-vl-n">12</span></div>
+    <input type="range" id="ex-sl-n" min="4" max="52" step="4" value="12">
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-card">
+    <div class="sb-card-lbl">Exotic Price (N=2000)</div>
+    <div class="sb-price" id="ex-price">&mdash;</div>
+    <div class="sb-price-sub" id="ex-price-sub">&mdash;</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Comparison</div>
+    <div class="sb-row"><span class="sb-key">European Call</span><span class="sb-val" id="ex-eu-price">&mdash;</span></div>
+    <div class="sb-row"><span class="sb-key" id="ex-prem-lbl">Premium over EU</span><span class="sb-val clr-teal" id="ex-premium">&mdash;</span></div>
+    <div class="sb-row" id="ex-itm-row" style="display:none">
+      <span class="sb-key">Avg periods positive</span><span class="sb-val" id="ex-itm-pct">&mdash;</span>
+    </div>
+  </div>
+  <div class="sb-note" id="ex-formula-note"></div>
+</div>`;
+}
+
+function exoticPanel() {
+  const vis = st => st === exSubTab ? '' : 'display:none';
+  return `
+<div id="ex-area-lbfixed" class="ex-area" style="${vis('lbfixed')}">
+  <div class="half-col">
+    <div class="chart-title">A &mdash; Lookback Fixed &mdash; running maximum &amp; payoff</div>
+    <div class="half-wrap"><canvas id="ex-lbf-path"></canvas></div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title">B &mdash; Price vs volatility &sigma;</div>
+    <div class="half-wrap"><canvas id="ex-lbf-curve"></canvas></div>
+  </div>
+</div>
+<div id="ex-area-lbfloat" class="ex-area" style="${vis('lbfloat')}">
+  <div class="half-col">
+    <div class="chart-title">A &mdash; Lookback Floating &mdash; running minimum &amp; payoff</div>
+    <div class="half-wrap"><canvas id="ex-lbfl-path"></canvas></div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title">B &mdash; Price vs volatility &sigma; (floating always costliest)</div>
+    <div class="half-wrap"><canvas id="ex-lbfl-curve"></canvas></div>
+  </div>
+</div>
+<div id="ex-area-cliquet" class="ex-area" style="${vis('cliquet')}">
+  <div class="half-col">
+    <div class="chart-title">A &mdash; Cliquet &mdash; periodic returns, gains locked in</div>
+    <div class="cliquet-stack">
+      <div class="half-wrap"><canvas id="ex-cl-path"></canvas></div>
+      <div class="cl-bar-wrap"><canvas id="ex-cl-bars"></canvas></div>
+    </div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title">B &mdash; Price vs number of reset periods n</div>
+    <div class="half-wrap"><canvas id="ex-cl-curve"></canvas></div>
+  </div>
+</div>
+<div class="annot-bar" id="ex-annot">&nbsp;</div>`;
+}
+
+function renderExLbFixed(S0, K, r, sigma, T, n, paths, disc, euPrice) {
+  const disp = paths.reduce((best, p) => lbfPay(p, K) > lbfPay(best, K) ? p : best, paths[0]);
+  const rMax = new Float64Array(n+1);
+  rMax[0] = disp[0];
+  for (let i=1; i<=n; i++) rMax[i] = Math.max(rMax[i-1], disp[i]);
+  const pay = Math.max(rMax[n]-K, 0);
+
+  mkChart('ex-lbf-path', {
+    type: 'line',
+    data: { datasets: [
+      { label:'S(t)', data:Array.from({length:n+1},(_,j)=>({x:j*T/n,y:disp[j]})), borderColor:'rgba(150,160,200,0.5)', borderWidth:1.4, pointRadius:0, fill:false },
+      { label:'Running Max', data:Array.from({length:n+1},(_,j)=>({x:j*T/n,y:rMax[j]})), borderColor:'rgba(108,140,255,0.9)', borderWidth:2.5, pointRadius:0, fill:false },
+      { label:'K='+K, data:[{x:0,y:K},{x:T,y:K}], borderColor:'rgba(255,210,80,0.55)', borderWidth:1.2, borderDash:[5,4], pointRadius:0, fill:false },
+      { label:'Payoff=$'+pay.toFixed(2), data:[{x:T,y:K},{x:T,y:rMax[n]}], borderColor:'rgba(80,200,120,0.9)', borderWidth:8, pointRadius:0, fill:false },
+    ]},
+    options: { animation:false, responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'none'},
+      plugins:{ legend:legendOpts(), tooltip:{enabled:false}, vlines:[] },
+      scales:{ x:xLinearScale('Time (years)'), y:yScale('S(t)') } },
+  });
+
+  const sigs = Array.from({length:12},(_,i)=>0.05+i*0.55/11);
+  const lbPr=[], euPr2=[];
+  sigs.forEach(s => {
+    const ps = exSim(S0,r,s,T,n,500);
+    lbPr.push(disc * mean(ps.map(p=>lbfPay(p,K))));
+    euPr2.push(bsCall(S0,K,r,s,T));
+  });
+
+  mkChart('ex-lbf-curve', {
+    type:'line',
+    data:{ datasets:[
+      { label:'Lookback Fixed', data:sigs.map((s,i)=>({x:s,y:lbPr[i]})), borderColor:'rgba(108,140,255,0.9)', backgroundColor:'rgba(108,140,255,0.12)', borderWidth:2, pointRadius:0, fill:'+1' },
+      { label:'European Call',  data:sigs.map((s,i)=>({x:s,y:euPr2[i]})), borderColor:'rgba(150,165,200,0.65)', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false },
+      { type:'scatter', label:'', data:[{x:sigma,y:disc*mean(paths.map(p=>lbfPay(p,K)))}], backgroundColor:'rgba(108,140,255,1)', borderColor:'#fff', borderWidth:2, pointRadius:5 },
+      { type:'scatter', label:'', data:[{x:sigma,y:euPrice}], backgroundColor:'rgba(150,165,200,0.9)', borderColor:'#fff', borderWidth:2, pointRadius:5 },
+    ]},
+    options:{ animation:false, responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:legendOpts(), tooltip:{enabled:false},
+        vlines:[{xVal:sigma,color:'rgba(200,210,255,0.35)',label:'σ'}] },
+      scales:{ x:xLinearScale('Volatility σ'), y:yScale('Price ($)',{min:0}) } },
+  });
+}
+
+function renderExLbFloat(S0, K, r, sigma, T, n, paths, disc, euPrice) {
+  const disp = paths.reduce((best,p) => lbflPay(p)>lbflPay(best)?p:best, paths[0]);
+  const rMin = new Float64Array(n+1);
+  rMin[0] = disp[0];
+  for (let i=1; i<=n; i++) rMin[i] = Math.min(rMin[i-1], disp[i]);
+  const pay = disp[n] - rMin[n];
+
+  mkChart('ex-lbfl-path', {
+    type:'line',
+    data:{ datasets:[
+      { label:'S(t)', data:Array.from({length:n+1},(_,j)=>({x:j*T/n,y:disp[j]})), borderColor:'rgba(150,160,200,0.5)', borderWidth:1.4, pointRadius:0, fill:false },
+      { label:'Running Min', data:Array.from({length:n+1},(_,j)=>({x:j*T/n,y:rMin[j]})), borderColor:'rgba(220,100,100,0.9)', borderWidth:2.5, pointRadius:0, fill:false },
+      { label:'Payoff=$'+pay.toFixed(2), data:[{x:T,y:rMin[n]},{x:T,y:disp[n]}], borderColor:'rgba(80,200,120,0.9)', borderWidth:8, pointRadius:0, fill:false },
+    ]},
+    options:{ animation:false, responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'none'},
+      plugins:{ legend:legendOpts(), tooltip:{enabled:false}, vlines:[] },
+      scales:{ x:xLinearScale('Time (years)'), y:yScale('S(t)') } },
+  });
+
+  const sigs = Array.from({length:12},(_,i)=>0.05+i*0.55/11);
+  const flPr=[], fxPr=[], euPr2=[];
+  sigs.forEach(s => {
+    const ps = exSim(S0,r,s,T,n,500);
+    flPr.push(disc * mean(ps.map(lbflPay)));
+    fxPr.push(disc * mean(ps.map(p=>lbfPay(p,K))));
+    euPr2.push(bsCall(S0,K,r,s,T));
+  });
+
+  mkChart('ex-lbfl-curve', {
+    type:'line',
+    data:{ datasets:[
+      { label:'Lookback Float', data:sigs.map((s,i)=>({x:s,y:flPr[i]})), borderColor:'rgba(220,100,100,0.9)', borderWidth:2, pointRadius:0, fill:false },
+      { label:'Lookback Fixed', data:sigs.map((s,i)=>({x:s,y:fxPr[i]})), borderColor:'rgba(108,140,255,0.7)', borderWidth:1.5, borderDash:[4,3], pointRadius:0, fill:false },
+      { label:'European Call',  data:sigs.map((s,i)=>({x:s,y:euPr2[i]})), borderColor:'rgba(150,165,200,0.6)', borderWidth:1.2, borderDash:[5,4], pointRadius:0, fill:false },
+      { type:'scatter', label:'', data:[{x:sigma,y:disc*mean(paths.map(lbflPay))}], backgroundColor:'rgba(220,100,100,1)', borderColor:'#fff', borderWidth:2, pointRadius:5 },
+    ]},
+    options:{ animation:false, responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:legendOpts(), tooltip:{enabled:false},
+        vlines:[{xVal:sigma,color:'rgba(200,210,255,0.35)',label:'σ'}] },
+      scales:{ x:xLinearScale('Volatility σ'), y:yScale('Price ($)',{min:0}) } },
+  });
+}
+
+function renderExCliquet(S0, K, r, sigma, T, n, paths, disc, euPrice) {
+  const disp = paths[Math.floor(Math.random() * Math.min(30, paths.length))];
+  const rets = Array.from({length:n}, (_,i) => disp[i+1]/disp[i]-1);
+
+  const segDS = [];
+  for (let i=0; i<n; i++) {
+    segDS.push({ label:'', data:[{x:i*T/n,y:disp[i]},{x:(i+1)*T/n,y:disp[i+1]}],
+      borderColor: rets[i]>=0 ? 'rgba(80,200,120,0.85)' : 'rgba(220,80,80,0.7)',
+      borderWidth:2.2, pointRadius:0, fill:false });
+  }
+  segDS.push({ type:'scatter', label:'', data:[{x:0,y:disp[0]}],
+    backgroundColor:'rgba(200,210,255,0.8)', pointRadius:4, borderWidth:0 });
+
+  const vlines = Array.from({length:n-1},(_,i)=>({xVal:(i+1)*T/n,color:'rgba(60,80,140,0.4)',label:''}));
+
+  mkChart('ex-cl-path', {
+    type:'line', data:{ datasets:segDS },
+    options:{ animation:false, responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'none'},
+      plugins:{ legend:{display:false}, tooltip:{enabled:false}, vlines },
+      scales:{
+        x:{ type:'linear', min:0, max:T, title:{display:true,text:'Time (years)',color:C.title}, ticks:{color:C.tick,maxTicksLimit:6}, grid:{color:C.grid} },
+        y: yScale('S(t)') } },
+  });
+
+  mkChart('ex-cl-bars', {
+    type:'bar',
+    data:{ labels: Array.from({length:n},(_,i)=>i+1), datasets:[
+      { label:'Gain', data:rets.map(r=>r>0?+(r*100).toFixed(3):0),
+        backgroundColor:'rgba(80,200,120,0.65)', borderColor:'rgba(80,200,120,0.9)', borderWidth:1 },
+      { label:'Loss', data:rets.map(r=>r<=0?+(r*100).toFixed(3):0),
+        backgroundColor:'transparent', borderColor:'rgba(220,80,80,0.55)', borderWidth:1.5 },
+    ]},
+    options:{ animation:false, responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{enabled:false}, vlines:[] },
+      scales:{
+        x:{ title:{display:true,text:'Period',color:C.title}, ticks:{color:C.tick}, grid:{color:C.grid} },
+        y:{ title:{display:true,text:'Return (%)',color:C.title}, ticks:{color:C.tick}, grid:{color:C.grid} } } },
+  });
+
+  const nVals = [1,2,4,8,12,24,52];
+  const clPr = nVals.map(nv => disc * mean(exSim(S0,r,sigma,T,nv,500).map(cliqPay)));
+
+  mkChart('ex-cl-curve', {
+    type:'line',
+    data:{ datasets:[
+      { label:'Cliquet', data:nVals.map((nv,i)=>({x:nv,y:clPr[i]})),
+        borderColor:'rgba(80,200,120,0.9)', backgroundColor:'rgba(80,200,120,0.10)',
+        borderWidth:2, pointRadius:3, fill:'origin', tension:0.3 },
+      { label:'European Call', data:[{x:0,y:euPrice},{x:55,y:euPrice}],
+        borderColor:'rgba(150,165,200,0.65)', borderWidth:1.5, borderDash:[5,4], pointRadius:0, fill:false },
+    ]},
+    options:{ animation:false, responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:legendOpts(), tooltip:{enabled:false},
+        vlines:[{xVal:n,color:'rgba(200,210,255,0.35)',label:'n='+n}] },
+      scales:{ x:xLinearScale('Periods n'), y:yScale('Price ($)',{min:0}) } },
+  });
+}
+
+function renderExotic() {
+  const S0    = +document.getElementById('ex-sl-s0').value;
+  const K     = +document.getElementById('ex-sl-K').value;
+  const r     = +document.getElementById('ex-sl-r').value;
+  const sigma = +document.getElementById('ex-sl-sigma').value;
+  const T     = +document.getElementById('ex-sl-T').value;
+  const n     = +document.getElementById('ex-sl-n').value;
+  const disc  = Math.exp(-r*T);
+  const paths = exSim(S0, r, sigma, T, n, 2000);
+  const euPrice = bsCall(S0, K, r, sigma, T);
+
+  let exPrice, exLabel, prem, premLbl, itmPct = null;
+  if (exSubTab === 'lbfixed') {
+    exPrice = disc * mean(paths.map(p=>lbfPay(p,K)));
+    exLabel='Lookback Fixed Call'; premLbl='Lookback premium';
+  } else if (exSubTab === 'lbfloat') {
+    exPrice = disc * mean(paths.map(lbflPay));
+    exLabel='Lookback Floating'; premLbl='Lookback premium';
+  } else {
+    exPrice = disc * mean(paths.map(cliqPay));
+    exLabel='Cliquet'; premLbl='Cliquet premium';
+    const posPerPath = paths.map(p => {
+      let c=0; for(let i=1;i<p.length;i++) if(p[i]>p[i-1]) c++;
+      return c/n*100;
+    });
+    itmPct = mean(posPerPath).toFixed(1)+'%';
+  }
+  prem = exPrice - euPrice;
+
+  document.getElementById('ex-price').textContent     = '$'+exPrice.toFixed(4);
+  document.getElementById('ex-price-sub').textContent = exLabel+' (N=2000)';
+  document.getElementById('ex-eu-price').textContent  = '$'+euPrice.toFixed(4);
+  document.getElementById('ex-prem-lbl').textContent  = premLbl;
+  document.getElementById('ex-premium').textContent   = '$'+prem.toFixed(4);
+  document.getElementById('ex-itm-row').style.display = itmPct ? 'flex' : 'none';
+  if (itmPct) document.getElementById('ex-itm-pct').textContent = itmPct;
+
+  ['lbfixed','lbfloat','cliquet'].forEach(st => {
+    const el = document.getElementById('ex-area-'+st);
+    if (el) el.style.display = st===exSubTab ? '' : 'none';
+  });
+
+  const kWrap = document.getElementById('ex-k-wrap');
+  const kNote = document.getElementById('ex-k-note');
+  const isFloat = exSubTab === 'lbfloat';
+  if (kWrap) {
+    kWrap.style.opacity       = isFloat ? '0.32' : '';
+    kWrap.style.pointerEvents = isFloat ? 'none'  : '';
+  }
+  if (kNote) kNote.textContent = isFloat ? 'not used — payoff is S(T) − min{S(tᵢ)}' : '';
+
+  const formulaNote = document.getElementById('ex-formula-note');
+  if (formulaNote) {
+    const formulas = {
+      lbfixed: 'Payoff: max( maxᵢ S(tᵢ) − K, 0 )',
+      lbfloat: 'Payoff: S(T) − minᵢ S(tᵢ)  ≥ 0 always',
+      cliquet: 'Payoff: Σᵢ max( S(tᵢ)/S(tᵢ₋₁) − 1, 0 )',
+    };
+    formulaNote.textContent = formulas[exSubTab];
+  }
+
+  if      (exSubTab==='lbfixed')  renderExLbFixed(S0,K,r,sigma,T,n,paths,disc,euPrice);
+  else if (exSubTab==='lbfloat')  renderExLbFloat(S0,K,r,sigma,T,n,paths,disc,euPrice);
+  else                            renderExCliquet(S0,K,r,sigma,T,n,paths,disc,euPrice);
+
+  document.getElementById('ex-annot').innerHTML =
+    `${exLabel}: <b>$${exPrice.toFixed(4)}</b>&ensp;|&ensp;European: <b>$${euPrice.toFixed(4)}</b>&ensp;|&ensp;${premLbl}: <b>$${prem.toFixed(4)}</b>`;
+}
+
+function initExotic() {
+  ['lbfixed','lbfloat','cliquet'].forEach(st => {
+    document.getElementById('ex-btn-'+st).addEventListener('click', () => {
+      exSubTab = st;
+      ['lbfixed','lbfloat','cliquet'].forEach(s =>
+        document.getElementById('ex-btn-'+s).classList.toggle('active', s===st));
+      renderExotic();
+    });
+  });
+  const sliders = [
+    { sl:'ex-sl-s0',    vl:'ex-vl-s0',    fmt:v=>Math.round(+v) },
+    { sl:'ex-sl-K',     vl:'ex-vl-K',     fmt:v=>Math.round(+v) },
+    { sl:'ex-sl-r',     vl:'ex-vl-r',     fmt:v=>(+v).toFixed(3) },
+    { sl:'ex-sl-sigma', vl:'ex-vl-sigma',  fmt:v=>(+v).toFixed(2) },
+    { sl:'ex-sl-T',     vl:'ex-vl-T',     fmt:v=>(+v).toFixed(2) },
+    { sl:'ex-sl-n',     vl:'ex-vl-n',     fmt:v=>Math.round(+v) },
+  ];
+  sliders.forEach(({sl,vl,fmt}) => {
+    const el=document.getElementById(sl), ve=document.getElementById(vl);
+    el.addEventListener('input', ()=>{ ve.textContent=fmt(el.value); renderExotic(); });
+  });
+  renderExotic();
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB 7 — CALIBRATION  (Algorithm 5.11)
+// ═══════════════════════════════════════════════════════
+
+function calGoldenSection(f, a, b) {
+  const phi = (Math.sqrt(5) - 1) / 2;
+  let c = b - phi * (b - a);
+  let d = a + phi * (b - a);
+  for (let i = 0; i < 80; i++) {
+    if (f(c) < f(d)) { b = d; } else { a = c; }
+    c = b - phi * (b - a);
+    d = a + phi * (b - a);
+    if (Math.abs(b - a) < 1e-10) break;
+  }
+  return (a + b) / 2;
+}
+
+function calImpliedVol(S0, K, r, T, mktPrice) {
+  const sqT = Math.sqrt(T);
+  let sigma = 0.20;
+  let niters = 1;
+  for (let i = 0; i < 100; i++) {
+    niters = i + 1;
+    const price = bsCall(S0, K, r, sigma, T);
+    if (Math.abs(price - mktPrice) < 1e-8) break;
+    const { d1 } = bsD1D2(S0, K, r, sigma, T, 0);
+    const vega = S0 * sqT * Math.exp(-0.5 * d1 * d1) / Math.sqrt(2 * Math.PI);
+    if (vega < 1e-10) break;
+    sigma = sigma - (price - mktPrice) / vega;
+    sigma = Math.max(0.001, Math.min(sigma, 5.0));
+  }
+  const finalErr = Math.abs(bsCall(S0, K, r, sigma, T) - mktPrice);
+  return { sigma, niters, converged: finalErr < 1e-5 };
+}
+
+function calMakeStrikes(S0, nK) {
+  const Kmin = 0.7 * S0, Kmax = 1.3 * S0;
+  return Array.from({ length: nK }, (_, i) => Kmin + i * (Kmax - Kmin) / (nK - 1));
+}
+
+function calMakeMarket(S0, r, trueSig, T, strikes, noiseLevel) {
+  return strikes.map(K => {
+    const clean = bsCall(S0, K, r, trueSig, T);
+    const noise = (Math.random() * 2 - 1) * noiseLevel * clean;
+    return Math.max(clean + noise, 0.0001);
+  });
+}
+
+function calSidebar() {
+  return `
+<div class="sb-section">
+  <div class="sb-title">Parameters</div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">S&#8320; &mdash; spot</span><span class="sl-val" id="cal-vl-s0">100</span></div>
+    <input type="range" id="cal-sl-s0" min="50" max="200" step="1" value="100">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">r &mdash; risk-free rate</span><span class="sl-val" id="cal-vl-r">0.050</span></div>
+    <input type="range" id="cal-sl-r" min="0.00" max="0.20" step="0.005" value="0.05">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">T &mdash; maturity (years)</span><span class="sl-val" id="cal-vl-T">1.00</span></div>
+    <input type="range" id="cal-sl-T" min="0.25" max="2.0" step="0.25" value="1.0">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">True &#963; (generates synthetic prices)</span><span class="sl-val" id="cal-vl-tsig">0.250</span></div>
+    <input type="range" id="cal-sl-tsig" min="0.05" max="0.60" step="0.01" value="0.25">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">Market noise (realistic price scatter)</span><span class="sl-val" id="cal-vl-noise">0.010</span></div>
+    <input type="range" id="cal-sl-noise" min="0.00" max="0.05" step="0.005" value="0.01">
+  </div>
+  <div class="sl-wrap">
+    <div class="sl-row"><span class="sl-name">Number of strike prices</span><span class="sl-val" id="cal-vl-nk">9</span></div>
+    <input type="range" id="cal-sl-nk" min="5" max="13" step="2" value="9">
+  </div>
+</div>
+<div class="sb-section">
+  <div class="sb-card">
+    <div class="sb-card-lbl">Calibrated &#963;&#770; (Algorithm 5.11)</div>
+    <div class="sb-price" id="cal-sigma-hat" style="font-size:26px">&mdash;</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Recovery Error</div>
+    <div class="sb-price" id="cal-err">&mdash;</div>
+    <div class="sb-price-sub">| &#963;&#770; &minus; true &#963; |</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">RMSE of Fit</div>
+    <div class="sb-price" id="cal-rmse">&mdash;</div>
+    <div class="sb-price-sub">root mean squared pricing error ($)</div>
+  </div>
+  <div class="sb-card">
+    <div class="sb-card-lbl">Newton Iterations &nbsp;<span id="cal-conv-badge" class="barrier-badge badge-up">&#10003; Converged</span></div>
+    <div class="sb-price" id="cal-niters">&mdash;</div>
+    <div class="sb-price-sub">avg iterations per option</div>
+  </div>
+  <div class="sb-note">
+    Synthetic market prices are generated using the true &#963; with added noise.
+    Algorithm 5.11 finds the single &#963;&#770; that minimises total squared pricing error across all strikes.
+  </div>
+</div>`;
+}
+
+function calPanel() {
+  return `
+<div class="dual-wrap">
+  <div class="half-col">
+    <div class="chart-title" id="cal-title-a">A &mdash; Algorithm 5.11 &mdash; Model Fit</div>
+    <div class="half-wrap"><canvas id="cal-fit"></canvas></div>
+  </div>
+  <div class="half-col">
+    <div class="chart-title" id="cal-title-b">B &mdash; Implied Volatility per Strike (Newton&rsquo;s method)</div>
+    <div class="half-wrap"><canvas id="cal-iv"></canvas></div>
+  </div>
+</div>`;
+}
+
+function renderCal() {
+  const S0      = +document.getElementById('cal-sl-s0').value;
+  const r       = +document.getElementById('cal-sl-r').value;
+  const T       = +document.getElementById('cal-sl-T').value;
+  const trueSig = +document.getElementById('cal-sl-tsig').value;
+  const noise   = +document.getElementById('cal-sl-noise').value;
+  const nK      = +document.getElementById('cal-sl-nk').value;
+
+  const strikes   = calMakeStrikes(S0, nK);
+  const mktPrices = calMakeMarket(S0, r, trueSig, T, strikes, noise);
+
+  // Algorithm 5.11 — golden section search
+  const objFn = sigma => {
+    let s = 0;
+    for (let i = 0; i < strikes.length; i++) {
+      const diff = bsCall(S0, strikes[i], r, sigma, T) - mktPrices[i];
+      s += diff * diff;
+    }
+    return s;
+  };
+  const sigHat = calGoldenSection(objFn, 0.001, 1.5);
+  const rmse   = Math.sqrt(objFn(sigHat) / strikes.length);
+
+  // Newton implied vol per strike
+  let totalIters = 0, allConverged = true;
+  const ivs = strikes.map((K, i) => {
+    const res = calImpliedVol(S0, K, r, T, mktPrices[i]);
+    totalIters += res.niters;
+    if (!res.converged) allConverged = false;
+    return res.sigma;
+  });
+  const avgIters = totalIters / strikes.length;
+
+  // Update sidebar stat cards
+  const err = Math.abs(sigHat - trueSig);
+  const sigEl = document.getElementById('cal-sigma-hat');
+  sigEl.textContent = sigHat.toFixed(4);
+  if (err < 0.01) {
+    sigEl.style.color = 'var(--accent2)';
+  } else if (err < 0.03) {
+    sigEl.style.color = '#ffc040';
+  } else {
+    sigEl.style.color = '#ff7777';
+  }
+  document.getElementById('cal-err').textContent   = (err * 100).toFixed(2) + '%';
+  document.getElementById('cal-rmse').textContent  = '$' + rmse.toFixed(4);
+  document.getElementById('cal-niters').textContent = avgIters.toFixed(1);
+  const badge = document.getElementById('cal-conv-badge');
+  badge.textContent = allConverged ? '✓ Converged' : '✗ Failed';
+  badge.className   = 'barrier-badge ' + (allConverged ? 'badge-up' : 'badge-down');
+
+  // Update chart A title with annotation
+  document.getElementById('cal-title-a').innerHTML =
+    'A — Algorithm 5.11 — Model Fit &nbsp;&nbsp;' +
+    '<span style="color:var(--dim);font-weight:400;text-transform:none">' +
+    'True σ = ' + trueSig.toFixed(3) +
+    ' &nbsp; Calibrated σ̂ = ' + sigHat.toFixed(4) +
+    ' &nbsp; RMSE = $' + rmse.toFixed(3) + '</span>';
+
+  // Dense grid for smooth BS(sigHat) curve
+  const Kmin = 0.7 * S0, Kmax = 1.3 * S0;
+  const denseKs = Array.from({ length: 120 }, (_, i) => Kmin + i * (Kmax - Kmin) / 119);
+  const densePrices = denseKs.map(K => ({ x: K, y: bsCall(S0, K, r, sigHat, T) }));
+
+  // Chart A — Model Fit
+  mkChart('cal-fit', {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Market prices (synthetic)',
+          data: strikes.map((K, i) => ({ x: K, y: mktPrices[i] })),
+          type: 'scatter',
+          backgroundColor: 'rgba(108,140,255,0.9)',
+          borderColor: 'rgba(108,140,255,0.9)',
+          pointRadius: 6, pointHoverRadius: 7,
+          showLine: false,
+        },
+        {
+          label: 'BS(σ̂)',
+          data: densePrices,
+          borderColor: 'rgba(235,240,255,0.82)',
+          borderWidth: 1.8,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.2,
+        },
+      ],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(),
+        tooltip: { mode: 'nearest', intersect: false },
+        vlines: [{ xVal: S0, color: 'rgba(160,165,210,0.40)', label: 'S₀', dash: [5, 4] }],
+      },
+      scales: {
+        x: xLinearScale('Strike K', { min: Kmin - (Kmax - Kmin) * 0.02, max: Kmax + (Kmax - Kmin) * 0.02 }),
+        y: yScale('Call Price ($)'),
+      },
+    },
+  });
+
+  // Chart B — Implied Volatility per Strike
+  document.getElementById('cal-title-b').innerHTML =
+    'B — Implied Volatility per Strike &nbsp;(Newton’s method) &nbsp;&nbsp;' +
+    '<span style="color:var(--dim);font-weight:400;text-transform:none">' +
+    'Flat smile = BS is the correct model for this synthetic data</span>';
+
+  const yPad = 0.08;
+  const yMin = Math.max(0.01, Math.min(...ivs, trueSig, sigHat) - yPad);
+  const yMax = Math.max(...ivs, trueSig, sigHat) + yPad;
+
+  mkChart('cal-iv', {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Implied vol (per strike)',
+          data: strikes.map((K, i) => ({ x: K, y: ivs[i] })),
+          type: 'scatter',
+          backgroundColor: 'rgba(108,140,255,0.9)',
+          borderColor: 'rgba(108,140,255,0.9)',
+          pointRadius: 6, pointHoverRadius: 7,
+          showLine: false,
+        },
+        {
+          label: 'True σ = ' + trueSig.toFixed(3),
+          data: [{ x: Kmin, y: trueSig }, { x: Kmax, y: trueSig }],
+          borderColor: 'rgba(255,110,90,0.85)',
+          borderWidth: 1.6,
+          borderDash: [6, 3],
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: 'Calibrated σ̂ = ' + sigHat.toFixed(4),
+          data: [{ x: Kmin, y: sigHat }, { x: Kmax, y: sigHat }],
+          borderColor: 'rgba(220,228,255,0.55)',
+          borderWidth: 1.3,
+          borderDash: [3, 3],
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: legendOpts(),
+        tooltip: { mode: 'nearest', intersect: false },
+        vlines: [],
+      },
+      scales: {
+        x: xLinearScale('Strike K', { min: Kmin - (Kmax - Kmin) * 0.02, max: Kmax + (Kmax - Kmin) * 0.02 }),
+        y: yScale('Implied Volatility', { min: yMin, max: yMax }),
+      },
+    },
+  });
+}
+
+function initCal() {
+  const sliders = [
+    { sl: 'cal-sl-s0',    vl: 'cal-vl-s0',    fmt: v => (+v).toFixed(0)   },
+    { sl: 'cal-sl-r',     vl: 'cal-vl-r',     fmt: v => (+v).toFixed(3)   },
+    { sl: 'cal-sl-T',     vl: 'cal-vl-T',     fmt: v => (+v).toFixed(2)   },
+    { sl: 'cal-sl-tsig',  vl: 'cal-vl-tsig',  fmt: v => (+v).toFixed(3)   },
+    { sl: 'cal-sl-noise', vl: 'cal-vl-noise',  fmt: v => (+v).toFixed(3)   },
+    { sl: 'cal-sl-nk',    vl: 'cal-vl-nk',    fmt: v => v                  },
+  ];
+  sliders.forEach(({ sl, vl, fmt }) => {
+    const el = document.getElementById(sl), ve = document.getElementById(vl);
+    el.addEventListener('input', () => { ve.textContent = fmt(el.value); renderCal(); });
+  });
+  renderCal();
+}
+
+// ═══════════════════════════════════════════════════════
+//  PLACEHOLDER TABS
+// ═══════════════════════════════════════════════════════
+
+function phSidebar(part) {
+  return `<div class="ph"><div class="ph-icon">&#9660;</div><div class="ph-text">Part ${part}</div></div>`;
+}
+function phPanel(name, part) {
+  return `<div class="ph"><div class="ph-icon">${name}</div><div class="ph-text">Coming in Part ${part}</div></div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  TAB REGISTRY
+// ═══════════════════════════════════════════════════════
+
+const TABS = {
+  path:        { sb: pathSidebar, panel: pathPanel, init: initPath },
+  european:    { sb: eurSidebar,  panel: eurPanel,  init: initEur  },
+  dividends:   { sb: divSidebar,  panel: divPanel,  init: initDiv  },
+  asian:       { sb: asianSidebar,       panel: asianPanel,                     init: initAsian },
+  barrier:     { sb: barrierSidebar, panel: barrierPanel, init: initBarrier },
+  exotic:      { sb: exoticSidebar, panel: exoticPanel, init: initExotic },
+  calibration: { sb: calSidebar, panel: calPanel, init: initCal },
+};
+
+// ═══════════════════════════════════════════════════════
+//  TAB SWITCHING
+// ═══════════════════════════════════════════════════════
+
+let activeTabId = 'path';
+
+const RENDERS = {
+  path:        renderPath,
+  european:    renderEur,
+  dividends:   renderDiv,
+  asian:       renderAsian,
+  barrier:     renderBarrier,
+  exotic:      renderExotic,
+  calibration: renderCal,
+};
+
+function switchTab(id) {
+  activeTabId = id;
+  destroyAll();
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+  const t = TABS[id];
+  document.getElementById('sidebar').innerHTML = t.sb();
+  document.getElementById('main').innerHTML    = t.panel();
+  t.init();
+}
+
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+document.getElementById('btn-refresh').addEventListener('click', () => { if (RENDERS[activeTabId]) RENDERS[activeTabId](); });
+switchTab('path');
+</script>
+</body>
+</html>
