@@ -1,0 +1,18 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Proiect Logistică"
+  navbar:
+    left:
+      - href: index.qmd
+        text: "Analiză Model"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    embed-resources: true  # Aceasta este linia magica!
+

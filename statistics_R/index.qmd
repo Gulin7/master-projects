@@ -1,0 +1,136 @@
+---
+title: "Analiza Regresiei Logistice Multiple"
+subtitle: "Studiu de caz: Propensitatea de acordare a creditelor bancare"
+author: "Raul Tudor (Lider Echipă)"
+date: today
+format: 
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+---
+
+## 1. Descrierea Setului de Date
+
+Setul de date provine din mediul financiar-bancar și urmărește identificarea clienților cu o probabilitate ridicată de a accepta o ofertă de credit personal. Variabila dependentă este `Personal.Loan` ($0 = \text{Nu}$, $1 = \text{Da}$).
+
+Predictorii includ variabile demografice (`Age`, `Experience`, `Family`, `Education`) și financiare (`Income`, `CCAvg`, `Mortgage`, `Securities.Account`, `CD.Account`, `Online`, `CreditCard`). Variabilele de identificare (`ID` și `ZIP.Code`) au fost eliminate.
+
+### Snapshot-ul Datelor
+
+```{r}
+#| label: load-data
+#| warning: false
+#| message: false
+
+# Citim fisierul direct din folderul curent
+file_path <- "bankloan.csv" 
+if (file.exists(file_path)) {
+  bank_data <- read.csv(file_path)
+  knitr::kable(head(bank_data), caption = "Primele 6 înregistrări din setul de date")
+} else {
+  cat("Fișierul CSV nu a fost găsit în folderul curent.")
+}
+```
+
+---
+
+## 2. Rezultatele Modelului și Interpretare
+
+Am aplicat metoda Verosimilității Maxime pentru a estima parametrii modelului logistic.
+
+### Sumarul Modelului (Output GLM)
+
+```{r}
+#| label: train-model
+#| warning: false
+#| message: false
+
+if (file.exists(file_path)) {
+  bank_data_clean <- subset(bank_data, select = -c(ID, ZIP.Code))
+  categorical_vars <- c("Education", "Securities.Account", "CD.Account", "Online", "CreditCard", "Personal.Loan")
+  bank_data_clean[categorical_vars] <- lapply(bank_data_clean[categorical_vars], as.factor)
+
+  logit_model <- glm(Personal.Loan ~ ., data = bank_data_clean, family = binomial(link = "logit"))
+  print(summary(logit_model))
+
+  actual_y <- as.numeric(as.character(bank_data_clean$Personal.Loan))
+  pred_prob <- predict(logit_model, type = "response")
+
+  ojs_define(real_y = actual_y, real_prob = pred_prob)
+}
+```
+
+### Interpretare Pragmatică
+* **Semnificație Statistică:** Predictorii `Income`, `Education` și `CD.Account` au valori $p < 0.05$, fiind esențiali în modelarea deciziei.
+* **Direcția Efectului:** Coeficientul $\beta$ pozitiv asociat variabilei `Income` demonstrează că o creștere a venitului majorează log-șansa de acceptare a creditului.
+
+---
+
+## 3. Explorator Interactiv: Matrice de Confuzie pe Date Reale
+
+Modificați slider-ul de mai jos pentru a reevalua dinamic deciziile modelului pe întreg setul de date.
+
+```{ojs}
+//| echo: false
+
+viewof prag = Inputs.range([0.01, 0.99], {value: 0.5, step: 0.01, label: "Prag de Clasificare:"})
+
+curent = {
+  let tp = 0, fp = 0, fn = 0, tn = 0;
+  
+  if (typeof real_y !== "undefined" && typeof real_prob !== "undefined") {
+    for (let i = 0; i < real_y.length; i++) {
+      let actual = real_y[i];
+      let pred = real_prob[i] >= prag ? 1 : 0;
+      
+      if (actual === 1 && pred === 1) tp++;
+      if (actual === 0 && pred === 1) fp++;
+      if (actual === 1 && pred === 0) fn++;
+      if (actual === 0 && pred === 0) tn++;
+    }
+  }
+  
+  let total_pozitivi = tp + fn;
+  let total_negativi = tn + fp;
+  
+  return {
+    tp: tp, fp: fp, fn: fn, tn: tn,
+    tpr: total_pozitivi > 0 ? (tp / total_pozitivi) : 0,
+    fpr: total_negativi > 0 ? (fp / total_negativi) : 0,
+    accuracy: (total_pozitivi + total_negativi) > 0 ? ((tp + tn) / (total_pozitivi + total_negativi)) : 0
+  };
+}
+
+md`
+**Metrici de Performanță (Prag ${prag}):**
+* **Acuratețe Globală:** ${(curent.accuracy * 100).toFixed(2)}%
+* **Sensibilitate (TPR):** ${(curent.tpr * 100).toFixed(2)}%
+* **Specificitate (TNR):** ${((1 - curent.fpr) * 100).toFixed(2)}%
+`
+
+html`
+<table style="width:100%; max-width:550px; border-collapse: collapse; text-align: center; margin-top: 15px;">
+  <tr>
+    <th style="border: 1px solid #ddd; padding: 8px;" colspan="2" rowspan="2">Matricea de Confuzie</th>
+    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;" colspan="2">Starea Reală</th>
+  </tr>
+  <tr>
+    <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">Real Pozitiv (1)</td>
+    <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">Real Negativ (0)</td>
+  </tr>
+  <tr>
+    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;" rowspan="2">Predicție</th>
+    <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">Predicție Pozitivă (1)</td>
+    <td style="border: 1px solid #ddd; padding: 8px; background-color: #d4edda;">${curent.tp} <br><small>Adevărat Pozitiv (TP)</small></td>
+    <td style="border: 1px solid #ddd; padding: 8px; background-color: #f8d7da;">${curent.fp} <br><small>Fals Pozitiv (FP)</small></td>
+  </tr>
+  <tr>
+    <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">Predicție Negativă (0)</td>
+    <td style="border: 1px solid #ddd; padding: 8px; background-color: #f8d7da;">${curent.fn} <br><small>Fals Negativ (FN)</small></td>
+    <td style="border: 1px solid #ddd; padding: 8px; background-color: #d4edda;">${curent.tn} <br><small>Adevărat Negativ (TN)</small></td>
+  </tr>
+</table>
+`
+```
+
